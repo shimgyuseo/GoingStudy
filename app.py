@@ -1,67 +1,27 @@
-"""나의 공부 성장 기록장 — 수행평가용 Streamlit 데모.
-외부 저장소 없이 session_state만 사용합니다. 예시 기록은 모두 가상입니다.
-새로고침/세션 종료 시 초기화될 수 있으며 다른 기기와 공유되지 않습니다.
-선택적 Secrets: APP_URL, PARENT_DEMO_PIN (미설정 시 공개 시연 PIN 2468).
+"""나의 공부 성장 기록장. Streamlit Community Cloud: app.py.
+선택적 Secrets: PARENT_PIN, APP_URL. 데이터와 사진은 접속 세션에만 보관.
+서로 다른 브라우저/기기는 독립 세션. 역할 전환은 데이터를 보존한다.
 """
 import calendar
-import copy
 import hmac
 import io
-import time
 import uuid
-from datetime import datetime, date, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from html import escape
 import streamlit as st
+import streamlit.components.v1 as components
 import qrcode
 
 KST = ZoneInfo('Asia/Seoul')
 UTC = timezone.utc
-SUBJECTS = ['국어', '수학', '영어', '한국사', '사회', '과학', '기타']
-REASONS = ['개념 부족', '관점·해석 오류', '계산 실수', '암기 부족', '시간 부족', '기타']
-st.set_page_config(page_title='나의 공부 성장 기록장', page_icon='🌱', layout='centered')
-st.markdown('''<style>
-:root{--bg:#fff;--fg:#111;--accent:#b94700;--edge:#111;color-scheme:light}
-@media(prefers-color-scheme:dark){:root{--bg:#080808;--fg:#fff;--accent:#ff9b45;--edge:#fff;color-scheme:dark}}
-.st-key-appearance{display:none}
-.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"], [data-testid="stHeader"]{background:var(--bg)!important;color:var(--fg)!important}
-[data-testid="stHeader"],footer,[data-testid="stToolbar"],[data-testid="stDecoration"]{display:none!important}
-[data-testid="stMain"]{height:100dvh!important;overflow:hidden!important}
-.block-container{max-width:760px;padding:8px 12px!important;height:100dvh;overflow:hidden}
-h1,h2,h3,p,label,span,[data-testid="stCaptionContainer"],[data-testid="stMetricLabel"],[data-testid="stMetricValue"]{color:inherit}
-h1{font-size:1.25rem!important;margin:0!important;padding:0!important}h2,h3{font-size:1.05rem!important;padding:.2rem 0!important}
-[data-testid="stMarkdownContainer"],[data-testid="stWidgetLabel"],[data-testid="stCaptionContainer"]{color:var(--fg)!important}
-.st-key-workspace{position:fixed!important;top:53px;bottom:calc(78px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:calc(100% - 20px);max-width:736px;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain;padding:4px 3px 12px}
-.st-key-bottomnav{position:fixed!important;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:760px;background:var(--bg)!important;border-top:2px solid var(--accent);padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:999}
-.st-key-bottomnav [role="radiogroup"]{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px!important;width:100%}
-.st-key-bottomnav [role="radiogroup"] label{margin:0!important;min-height:44px;justify-content:center;padding:4px 1px!important;border:1px solid var(--accent);border-radius:8px;cursor:pointer}
-.st-key-bottomnav [role="radiogroup"] label>div:first-child{display:none!important}
-.st-key-bottomnav label:has(input:checked){background:var(--accent)!important;color:var(--bg)!important}
-.st-key-bottomnav p{font-size:12px!important;font-weight:700;white-space:nowrap}
-button{min-height:44px!important;background:var(--bg)!important;color:var(--fg)!important;border:1px solid var(--accent)!important;border-radius:9px!important}
-button p,button span{color:inherit!important}
-button[kind="primary"]{background:var(--accent)!important;color:var(--bg)!important}
-button:disabled{opacity:.45}
-input,textarea,[data-baseweb="input"],[data-baseweb="base-input"],[data-baseweb="select"]>div,[role="listbox"],[role="option"],[data-baseweb="popover"]{background:var(--bg)!important;color:var(--fg)!important;-webkit-text-fill-color:var(--fg)!important}
-input::placeholder,textarea::placeholder{color:var(--fg)!important;opacity:.65}
-[data-testid="stForm"],[data-testid="stVerticalBlockBorderWrapper"]{border-color:var(--accent)!important}
-[data-testid="stMetricValue"]{font-size:1.25rem!important}
-[data-testid="stVerticalBlock"]{gap:.5rem}
-.st-key-role_student button,.st-key-role_parent button{aspect-ratio:1;min-height:0!important;width:100%;font-size:1.2rem!important}
-.st-key-role_student,.st-key-role_parent{max-width:190px;margin:auto}
-.st-key-calendargrid [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:2px!important}
-.st-key-calendargrid [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
-.st-key-calendargrid button{padding:2px!important;min-height:39px!important}
-.st-key-calendargrid button p{font-size:11px!important;white-space:pre-line}
-[data-testid="stAlert"]{background:var(--bg)!important;color:var(--fg)!important;border:1px solid var(--accent)}
-</style>''',unsafe_allow_html=True)
+BASIC = ['수학', '국어', '영어', '사회', '과학', '한국사']
+CAUSES = ['개념 부족', '관점·해석 오류', '계산 실수', '암기 부족', '시간 부족', '기타']
+MENUS = [('notes','오답노트'),('calendar','달력'),('timer','공부시간'),('stamps','스탬프'),('settings','설정')]
+st.set_page_config(page_title='나의 공부 성장 기록장', page_icon='📖', layout='centered')
+
 def now():
     return datetime.now(UTC)
-
-def iso(t):
-    return t.astimezone(UTC).isoformat()
-
-def dt(s):
-    return datetime.fromisoformat(s)
 
 def today():
     return now().astimezone(KST).date()
@@ -69,471 +29,463 @@ def today():
 def uid():
     return uuid.uuid4().hex
 
-def fmt(seconds):
-    s = max(0, int(seconds))
-    return f'{s//3600:02}:{s%3600//60:02}:{s%60:02}'
+def iso(value):
+    return value.astimezone(UTC).isoformat()
 
-def initial():
-    return {'mode':'auto', 'cycle':uid(), 'active_day':None, 'segments':[],
-            'notes':[], 'reviews':[], 'exams':[], 'stamps':{},
-            'grades':[{'id':'baseline1','name':'1학기 평균 (약)','value':2.0,'date':None},
-                      {'id':'baseline2','name':'중간고사 (약)','value':1.8,'date':None}],
-            'target':None}
+def fmt(value):
+    sec = max(0, int(value))
+    return f'{sec//3600:02}:{sec%3600//60:02}:{sec%60:02}'
 
-def seed_demo():
-    data = initial()
-    data['target'] = 1.5
-    base = today()
-    for i in range(6, -1, -1):
-        day = base-timedelta(days=i)
-        started = datetime.combine(day, datetime.min.time(), KST)+timedelta(hours=8)
-        duration = 35 if i==0 else 50+i*10
-        data['segments'].append({'id':uid(),'start':iso(started),'end':iso(started+timedelta(minutes=duration)),
-            'mode':'auto','day':day.isoformat(),'cycle':'sample',
-            'subject':['수학','영어','국어'][i%3], 'content':'[가상 예시] '+['함수 그래프와 오답 정리','영어 지문 근거 찾기','문학 작품 표현 분석'][i%3]})
-        if i>0:
-            data['stamps'][day.isoformat()]={'at':iso(started+timedelta(hours=1,minutes=duration))}
-    examples = [
-      ('수학','이차함수 최댓값','개념 부족','복습 필요','f(x)=-x²+4x+1의 최댓값을 구하시오.','f(x)=-(x-2)²+5이므로 최댓값은 5이다.','함숫값과 x좌표를 혼동했다.','완전제곱식과 꼭짓점의 관계가 부족했다.','유형 풀이 후 조건을 바꿔 보는 연습이 부족했다.'),
-      ('영어','독해 지문 근거 찾기','관점·해석 오류','복습 필요','[가상 지문] Some students prefer silence. However, others learn better with quiet music. 글의 내용으로 알맞은 것은?','학생마다 선호하는 공부 환경이 다르다. however 뒤의 대조 내용까지 읽어야 한다.','앞 문장만 읽고 모든 학생이 조용한 환경을 선호한다고 일반화했다.','대조 연결어의 기능을 놓쳤다.','지문 속 근거 문장에 표시하는 연습이 부족했다.'),
-      ('국어','직유법 구분','암기 부족','이해 완료','“구름 같은 솜사탕”에 사용된 표현법은?','직유법. “같은”을 사용해 솜사탕을 구름에 직접 빗댔다.','비유 대상과 표현을 충분히 확인하지 않았다.','직유법과 은유법을 구분하지 못했다.','정의만 외우고 예문 비교를 하지 않았다.'),
-      ('수학','일차방정식 계산','계산 실수','이미 아는 유형','2x+3=9를 푸시오.','2x=6, x=3이다.','해당 없음','해당 없음','이항 후 부호를 점검하지 않았다.')]
-    for i,(subject,title,reason,status,problem,answer,interpretation,concept,preparation) in enumerate(examples):
-        nid=uid()
-        created=(base-timedelta(days=i+1)).isoformat()
-        data['notes'].append(dict(id=nid,source='학교 시험' if i%2==0 else '기출·시험 대비 문제',subject=subject,
-            title='[가상 예시] '+title,problem=problem,answer=answer,interpretation=interpretation,concept=concept,
-            preparation=preparation,reasons=[reason],extra='다음 복습에서 풀이 이유를 말로 설명해 보기.',status=status,
-            created_day=created,created_at=iso(now())))
-        if status=='이해 완료':
-            data['reviews'].append(dict(id=uid(),note_id=nid,title='[가상 예시] '+title,subject=subject,
-                day=base.isoformat(),at=iso(now()),result=status))
-    for subject,days in [('수학',2),('영어',3),('국어',7)]:
-        data['exams'].append(dict(id=uid(),subject=subject,name='[가상 예시] 시험',day=(base+timedelta(days=days)).isoformat()))
-    data['grades'].append(dict(id=uid(),name='[가상 예시] 다음 시험 평균',value=1.6,date=(base-timedelta(days=1)).isoformat()))
-    return data
-
-def option(key, default=''):
+def secret(key, default=''):
     try:
-        return st.secrets.get(key,default)
+        return str(st.secrets.get(key, default))
     except Exception:
         return default
 
-class StorageError(Exception):
-    pass
+def empty_data():
+    return dict(subjects=BASIC.copy(), segments=[], notes=[], exams=[], reviews=[], stamps={},
+                mode='auto', active_day=None, cycle=uid(), target=None, grades=[])
 
-if 'demo_data' not in st.session_state:
-    st.session_state.demo_data=seed_demo()
+if 'records' not in st.session_state:
+    st.session_state.records = empty_data()
+if 'screen' not in st.session_state:
+    st.session_state.screen = 'timer'
+if 'theme' not in st.session_state:
+    st.session_state.theme = '기기 설정'
 
-def load():
-    return {'data':copy.deepcopy(st.session_state.demo_data)}
-
-def mutate(fn, role='student'):
-    if st.session_state.get('role')!=role:
-        raise StorageError('이 작업을 수행할 권한이 없습니다.')
-    data=copy.deepcopy(st.session_state.demo_data)
-    fn(data)
-    st.session_state.demo_data=data
-
-def save(fn, role='student'):
-    try:
-        mutate(fn,role)
-        st.rerun()
-    except StorageError as e:
-        st.error(str(e))
-
-
-if st.session_state.get('theme') in ('밝게','어둡게'):
-    dark=st.session_state.theme=='어둡게'
-    bg,fg,accent=('#080808','#fff','#ff9b45') if dark else ('#fff','#111','#b94700')
-    st.markdown(f'<style>:root{{--bg:{bg}!important;--fg:{fg}!important;--accent:{accent}!important;color-scheme:{"dark" if dark else "light"}}}</style>',unsafe_allow_html=True)
+# Datetime helpers do not depend on UI. UTC timestamps, KST study-day boundaries.
 def portions(segment, at):
-    start = dt(segment['start'])
-    end = dt(segment['end']) if segment.get('end') else at
+    start = datetime.fromisoformat(segment['start'])
+    end = datetime.fromisoformat(segment['end']) if segment['end'] else at
     if end <= start:
         return []
     if segment['mode'] == 'manual':
         return [(segment['day'], (end-start).total_seconds())]
-    result = []
+    out = []
     while start < end:
-        local = start.astimezone(KST)
-        boundary = datetime.combine(local.date()+timedelta(days=1), datetime.min.time(), KST).astimezone(UTC)
-        stop = min(end, boundary)
-        result.append((local.date().isoformat(), (stop-start).total_seconds()))
+        day = start.astimezone(KST).date()
+        midnight = datetime.combine(day+timedelta(days=1), datetime.min.time(), KST).astimezone(UTC)
+        stop = min(end, midnight)
+        out.append((day.isoformat(), (stop-start).total_seconds()))
         start = stop
-    return result
+    return out
 
 def totals(data, at):
-    result = {}
-    for s in data['segments']:
-        for day, seconds in portions(s, at):
-            result[day] = result.get(day, 0) + seconds
-    return result
+    out = {}
+    for segment in data['segments']:
+        for day, sec in portions(segment, at):
+            out[day] = out.get(day, 0)+sec
+    return out
 
-def close_running(data, at):
-    for s in data['segments']:
-        if not s.get('end'):
-            s['end'] = iso(max(dt(s['start']), at))
+def stop_timer(data, at):
+    for segment in data['segments']:
+        if not segment['end']:
+            segment['end'] = iso(max(at, datetime.fromisoformat(segment['start'])))
 
-def studied_day(data):
-    return data.get('active_day') if data['mode']=='manual' and data.get('active_day') else today().isoformat()
+def study_day(data):
+    return data['active_day'] if data['mode']=='manual' and data['active_day'] else today().isoformat()
 
-@st.fragment(run_every='1s')
-def timer_panel():
-    try:
-        data = load()['data']
-    except StorageError as e:
-        st.error(str(e))
-        return
-    at = now()
-    day = studied_day(data)
-    total = totals(data, at).get(day, 0)
-    elapsed = 0
-    for s in data['segments']:
-        if s['cycle'] == data['cycle']:
-            elapsed += sum(sec for d,sec in portions(s, at) if data['mode']=='manual' or d==today().isoformat())
-    running = any(not s.get('end') for s in data['segments'])
-    st.metric('오늘의 공부 시간', fmt(total))
-    st.caption(f'타이머 {fmt(elapsed)} · {"공부 중" if running else "정지"} · {"자동 마감" if data["mode"]=="auto" else "직접 마감 / 공부일 "+day}')
-    if not student:
-        return
-    with st.container(border=True):
-        st.markdown('공부할 과목·내용')
-        subject = st.selectbox('과목', SUBJECTS, key='timer_subject')
-        content = st.text_input('간단한 학습 내용', max_chars=500, key='timer_content')
-        st.caption('시작할 때 선택한 내용이 저장됩니다. 바꾸려면 일시정지 후 다시 시작하세요.')
-    controls = st.columns(3 if data['mode']=='manual' else 2)
-    a,b = controls[:2]
-    if a.button('공부 시작', disabled=running, type='primary', use_container_width=True):
-        sid, started = uid(), now()
-        def start(d):
-            if any(not s.get('end') for s in d['segments']):
-                return
-            day0 = d.get('active_day') or started.astimezone(KST).date().isoformat()
-            d['active_day'] = day0
-            d['segments'].append({'id':sid,'start':iso(started),'end':None,
-                'mode':d['mode'],'day':day0,'cycle':d['cycle'],'subject':subject,'content':content.strip()})
-        save(start)
-    if b.button('일시정지', disabled=not running, use_container_width=True):
-        ended = now()
-        save(lambda d: close_running(d, ended))
-    if data['mode']=='manual' and controls[2].button('오늘 공부 끝', use_container_width=True):
-        ended, newcycle = now(), uid()
-        def finish(d):
-            close_running(d, ended)
-            d['cycle'] = newcycle
-            d['active_day'] = None
-        save(finish)
-    st.caption('표시는 약 1초마다 갱신됩니다. 연결 세션이 유지되는 동안 시작~정지 사이 시간을 계산합니다. 새로고침하면 초기화될 수 있습니다.')
+def authorize(role='student'):
+    return st.session_state.get('role') == role
 
+def start_subject(data, subject, content, at):
+    stop_timer(data, at)
+    if data['mode']=='manual' and not data['active_day']:
+        data['active_day'] = at.astimezone(KST).date().isoformat()
+    data['segments'].append(dict(id=uid(), subject=subject, content=content, start=iso(at), end=None,
+        day=study_day(data), mode=data['mode'], cycle=data['cycle']))
+
+def finish_day(data, at):
+    stop_timer(data, at)
+    data['active_day'] = None
+    data['cycle'] = uid()
+
+def add_stamp(data, day, at):
+    key = day.isoformat()
+    if day <= at.astimezone(KST).date() and key not in data['stamps']:
+        data['stamps'][key] = iso(at)
+
+def rerun():
+    st.rerun()
+
+css = '''
+:root{--bg:#fff;--fg:#101010;--accent:#bc4900;--line:#dedede;--soft:#f5f5f5;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#111;--fg:#f5f5f5;--accent:#ff9b43;--line:#303030;--soft:#1c1c1c;color-scheme:dark}}
+.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{background:var(--bg)!important;color:var(--fg)!important}
+[data-testid="stHeader"],[data-testid="stToolbar"],footer,[data-testid="stDecoration"]{display:none!important}
+[data-testid="stMain"]{height:100dvh!important;overflow:hidden!important}
+.block-container{max-width:560px!important;padding:12px 14px!important;height:100dvh;overflow:hidden}
+h1{font-size:19px!important;line-height:1.4!important;padding:0!important;margin:0!important}
+h2,h3{font-size:18px!important;line-height:1.4!important;padding:4px 0!important;margin:0!important}
+p,label,span,[data-testid="stMarkdownContainer"],[data-testid="stWidgetLabel"],[data-testid="stCaptionContainer"]{color:var(--fg)}
+[data-testid="stCaptionContainer"]{opacity:.72}
+[data-testid="stVerticalBlock"]{gap:9px!important}
+.st-key-workspace{position:fixed!important;top:51px;bottom:calc(88px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:calc(100% - 28px);max-width:532px;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain;padding:4px 0 16px}
+.st-key-bottomnav{position:fixed!important;bottom:calc(12px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:calc(100% - 24px);max-width:532px;z-index:100;background:var(--soft);border:1px solid var(--line);border-radius:32px;padding:6px!important}
+.st-key-bottomnav [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:1px!important}
+.st-key-bottomnav [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
+.st-key-bottomnav button{height:53px!important;min-height:53px!important;border:0!important;border-radius:25px!important;background:transparent!important;padding:2px!important}
+.st-key-bottomnav button p{font-size:11px!important;line-height:1.5!important;white-space:pre-line!important;font-weight:600}
+.st-key-bottomnav button[kind="primary"]{background:var(--accent)!important;color:var(--bg)!important}
+button{min-height:44px!important;border:1px solid var(--line)!important;border-radius:13px!important;background:var(--bg)!important;color:var(--fg)!important}
+button p,button span{color:inherit!important}
+button[kind="primary"]{background:var(--accent)!important;border-color:var(--accent)!important;color:var(--bg)!important}
+button:disabled{opacity:.45}
+input,textarea,[data-baseweb="input"],[data-baseweb="base-input"],[data-baseweb="select"]>div,[role="option"],[role="listbox"],[data-baseweb="popover"]{background:var(--soft)!important;color:var(--fg)!important;-webkit-text-fill-color:var(--fg)!important}
+input::placeholder,textarea::placeholder{color:var(--fg)!important;opacity:.5}
+[data-testid="stForm"],[data-testid="stVerticalBlockBorderWrapper"]{border-color:var(--line)!important}
+[data-testid="stAlert"]{background:var(--soft)!important;color:var(--fg)!important;border:1px solid var(--line)}
+[data-testid="stMetricValue"]{font-size:21px!important}
+[data-testid="stMetricLabel"]{font-size:12px!important}
+.st-key-role_student button,.st-key-role_parent button{aspect-ratio:1;min-height:0!important;width:100%;font-size:20px!important}
+.st-key-role_student,.st-key-role_parent{max-width:190px;margin:auto}
+.st-key-workspace [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:8px!important}
+.st-key-workspace [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
+.st-key-calgrid [data-testid="stHorizontalBlock"],.st-key-stampgrid [data-testid="stHorizontalBlock"],.subject-row [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:3px!important}
+.st-key-calgrid [data-testid="stColumn"],.st-key-stampgrid [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
+.st-key-calgrid button{min-height:46px!important;border:0!important;border-radius:8px!important;padding:1px!important}
+.st-key-calgrid button p{font-size:11px!important;white-space:pre-line!important;line-height:1.25!important}
+.st-key-stampgrid button{aspect-ratio:1;min-height:48px!important;border:1px dashed var(--accent)!important;border-radius:50%!important;padding:2px!important}
+.st-key-stampgrid button p{font-size:12px!important;white-space:pre-line}
+.st-key-stampgrid button:disabled{opacity:1!important}
+.subject-name{font-size:19px;font-weight:600;margin:9px 0}
+.rule{border-top:1px solid var(--line);margin:8px 0}
+'''
+st.markdown('<style>'+css+'</style>', unsafe_allow_html=True)
+if st.session_state.theme != '기기 설정':
+    dark = st.session_state.theme=='어둡게'
+    bg, fg, accent, line, soft = ('#111','#f5f5f5','#ff9b43','#303030','#1c1c1c') if dark else ('#fff','#101010','#bc4900','#dedede','#f5f5f5')
+    st.markdown(f'<style>:root{{--bg:{bg}!important;--fg:{fg}!important;--accent:{accent}!important;--line:{line}!important;--soft:{soft}!important;color-scheme:{"dark" if dark else "light"}}}</style>', unsafe_allow_html=True)
 st.title('나의 공부 성장 기록장')
+
 if 'role' not in st.session_state:
     with st.container(key='workspace'):
-        st.subheader('누가 접속하나요?')
-        st.write('노력을 기록하고, 성장을 함께 확인해요.')
-        left,right=st.columns(2)
-        with left:
+        st.write('공부의 과정과 성장을 함께 기록해요.')
+        st.subheader('누가 사용하나요?')
+        a,b=st.columns(2)
+        with a:
             if st.button('학생',key='role_student',use_container_width=True):
                 st.session_state.role='student'
-                st.rerun()
-        with right:
+                rerun()
+        with b:
             if st.button('부모님',key='role_parent',use_container_width=True):
                 st.session_state.parent_login=True
         if st.session_state.get('parent_login'):
             with st.form('parent_login_form'):
-                pin=st.text_input('부모님 PIN',type='password')
-                if not option('PARENT_DEMO_PIN'):
-                    st.caption('시연용 PIN: 2468')
-                if st.form_submit_button('부모님으로 시작',type='primary'):
-                    if hmac.compare_digest(pin,str(option('PARENT_DEMO_PIN','2468'))):
+                pin=st.text_input('부모님 비밀번호',type='password')
+                if not secret('PARENT_PIN'):
+                    st.caption('기본 비밀번호 2468 · 설정에서 변경할 수 있습니다.')
+                if st.form_submit_button('접속',type='primary',use_container_width=True):
+                    expected=st.session_state.get('parent_pin',secret('PARENT_PIN','2468'))
+                    if hmac.compare_digest(pin,expected):
                         st.session_state.role='parent'
-                        st.rerun()
+                        rerun()
                     else:
-                        st.error('PIN을 확인해 주세요.')
+                        st.error('비밀번호를 확인해 주세요.')
     st.stop()
-student=st.session_state.role=='student'
-menus=['오답노트','달력','공부시간','스탬프','설정']
+
+student=authorize()
+data=st.session_state.records
+icons={'notes':'▤','calendar':'▦','timer':'◷','stamps':'◎','settings':'⚙'}
 with st.container(key='bottomnav'):
-    menu=st.radio('메뉴',menus,index=2,key='menu',horizontal=True,label_visibility='collapsed')
-state=load()['data']
-with st.container(key='workspace'):
-    st.caption('학생' if student else '부모님 · 기록 조회 및 확인')
-    if menu=='공부시간':
-        timer_panel()
-        data=load()['data']
-        current=totals(data,now())
-        monday=today()-timedelta(days=today().weekday())
-        st.metric('이번 주 누적 공부 시간',fmt(sum(current.get((monday+timedelta(days=i)).isoformat(),0) for i in range(7))))
-        st.write('복습 이해 완료: '+str(sum(n['status']=='이해 완료' for n in data['notes']))+'개')
-    elif menu=='달력':
-        st.subheader('공부 달력')
-        month = st.date_input('월 선택', value=today().replace(day=1), label_visibility='collapsed')
-        at = now()
-        daily = totals(state, at)
-        weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(month.year, month.month)
-        with st.container(key='calendargrid'):
-            for col, label in zip(st.columns(7), ['월','화','수','목','금','토','일']):
-                col.markdown(f'**{label}**')
-            for week in weeks:
-                for col, day0 in zip(st.columns(7), week):
-                    key = day0.isoformat()
-                    seconds = daily.get(key, 0)
-                    label = f'{day0.day}\n{int(seconds)//3600}h{int(seconds)%3600//60:02}' if seconds else str(day0.day)
-                    if key in state['stamps']:
-                        label += ' ✓'
-                    if col.button(label, key='cal_'+key, disabled=day0.month!=month.month, use_container_width=True):
-                        st.session_state.selected_day = key
-        selected = st.session_state.get('selected_day', today().isoformat())
-        week_start = today()-timedelta(days=today().weekday())
-        week_days = [(week_start+timedelta(days=i)).isoformat() for i in range(7)]
-        stamp_count = sum(d in state['stamps'] for d in week_days)
-        week_seconds = sum(daily.get(d,0) for d in week_days)
-        review_count = sum(n['status']=='이해 완료' for n in state['notes'])
-        a,b,c = st.columns(3)
-        a.metric('이번 주 공부', fmt(week_seconds))
-        b.metric('이해 완료 오답', f'{review_count}개')
-        c.metric('이번 주 스탬프', f'{stamp_count}/7')
-        st.caption('월요일~일요일 · '+'  '.join(f'{label}{"✅" if d in state["stamps"] else "▫️"}' for label,d in zip('월화수목금토일',week_days)))
-        if stamp_count == 7:
-            st.success('이번 주 용돈 조건 달성!')
+    for col,(key,label) in zip(st.columns(5),MENUS):
+        if col.button(icons[key]+'\n'+label,key='nav_'+key,type='primary' if st.session_state.screen==key else 'secondary',use_container_width=True):
+            st.session_state.screen=key
+            rerun()
 
-        with st.container(border=True):
-            st.markdown(f'📅 {selected} 상세 기록·부모님 확인')
-            st.write('누적 공부 시간: **'+fmt(daily.get(selected,0))+'**')
-            found = False
-            for s in state['segments']:
-                sec = sum(t for d,t in portions(s,at) if d==selected)
-                if sec>0:
-                    found = True
-                    st.write(f'• {s["subject"]} · {fmt(sec)} · {s["content"] or "내용 미입력"}')
-            if not found:
-                st.caption('공부 시간 기록이 없습니다.')
-            for n in state['notes']:
-                if n['created_day']==selected:
-                    st.write(f'✍️ 작성: {n["subject"]} / {n["title"]} · {n["status"]}')
-            for r in state['reviews']:
-                if r['day']==selected:
-                    st.write(f'🔁 복습: {r["subject"]} / {r["title"]} · {r["result"]}')
-            stamp = state['stamps'].get(selected)
-            if stamp:
-                st.success('부모님 확인 완료 · '+dt(stamp['at']).astimezone(KST).strftime('%m/%d %H:%M'))
-                st.caption('스탬프는 해당 시점의 확인 기록입니다. 이후 추가된 공부 내용까지 확인했다는 뜻은 아닙니다.')
-            elif student:
-                st.caption('부모님으로 로그인하면 확인 스탬프를 찍을 수 있습니다.')
-            elif selected > today().isoformat():
-                st.info('미래 날짜에는 스탬프를 찍을 수 없습니다.')
-            else:
-                confirmed = st.checkbox('위 날짜의 공부 시간·학습 내용·오답 기록을 확인했습니다.')
-                if st.button('부모님 확인 스탬프', disabled=not confirmed, type='primary'):
-                    stamp_at = iso(now())
-                    def stamp_day(d):
-                        if selected not in d['stamps']:
-                            d['stamps'][selected] = {'at':stamp_at}
-                    save(stamp_day, 'parent')
+def day_details(data, day):
+    key=day.isoformat()
+    st.markdown(f'**{day:%m월 %d일} · {fmt(totals(data,now()).get(key,0))}**')
+    any_record=False
+    for seg in data['segments']:
+        seconds=sum(sec for k,sec in portions(seg,now()) if k==key)
+        if seconds>0:
+            any_record=True
+            st.write(f'{seg["subject"]} · {fmt(seconds)}'+(' · '+seg['content'] if seg['content'] else ''))
+    if not any_record:
+        st.caption('아직 공부 기록이 없습니다.')
+    for note in data['notes']:
+        if note['day']==key:
+            st.write('작성한 오답 · '+note['subject']+' / '+note['title'])
+    for review in data['reviews']:
+        if review['day']==key:
+            st.write('복습한 오답 · '+review['title']+' / '+review['result'])
+    if key in data['stamps']:
+        st.caption('부모님 확인 완료 · '+datetime.fromisoformat(data['stamps'][key]).astimezone(KST).strftime('%H:%M'))
 
-    elif menu=='오답노트':
-        st.subheader('오답·시험 직전 복습')
-        upcoming = {}
-        for e in state['exams']:
-            diff = (date.fromisoformat(e['day'])-today()).days
-            if 0 <= diff <= 3:
-                upcoming[e['subject']] = min(upcoming.get(e['subject'], date.max), date.fromisoformat(e['day']))
-        if upcoming:
-            st.warning('3일 이내 시험: '+', '.join(f'{s} {d:%m/%d}' for s,d in upcoming.items()))
-        if 'cram' not in st.session_state:
-            st.session_state.cram = False
-        if st.button('시험 직전 복습', use_container_width=True):
-            st.session_state.cram = not st.session_state.cram
-        show_all = st.checkbox('이해 완료·이미 아는 유형도 보기', disabled=st.session_state.cram)
-        if st.session_state.cram:
-            st.caption('시험 직전 복습 중: 모든 과목의 복습 필요 문제만 표시하며, 3일 이내 시험 과목이 우선입니다.')
-        filtered = [n for n in state['notes'] if n['status']=='복습 필요' or (show_all and not st.session_state.cram)]
-        filtered.sort(key=lambda n:(0 if n['subject'] in upcoming else 1, upcoming.get(n['subject'],date.max), n['created_day']))
-        st.caption(f'복습 필요 {sum(n["status"]=="복습 필요" for n in state["notes"])}개 · 이해 완료 {review_count}개')
-        if not filtered:
-            st.info('표시할 오답이 없습니다. 새 오답을 작성하거나 완료 항목 보기를 켜 주세요.')
-        for n in filtered:
-            with st.container(border=True):
-                st.markdown(f'{"🔥 " if n["subject"] in upcoming and n["status"]=="복습 필요" else ""}{n["subject"]} · {n["title"]} · {n["status"]}')
-                st.caption(n['source']+' · '+n['created_day']+' · '+', '.join(n['reasons']))
-                for label,key in [('문제 내용','problem'),('정답 및 풀이','answer'),('문제를 잘못 해석한 부분','interpretation'),('개념이 부족했던 부분','concept'),('시험 준비에서 부족했던 점','preparation'),('원인 추가 설명','extra')]:
-                    st.text(label+'\n'+(n.get(key) or '없음'))
-                if student:
-                    status = st.selectbox('학습 상태', ['복습 필요','이해 완료','이미 아는 유형'], index=['복습 필요','이해 완료','이미 아는 유형'].index(n['status']), key='status_'+n['id'])
-                    if st.button('복습 결과·상태 저장', key='review_'+n['id']):
-                        nid, result, rid, when = n['id'], status, uid(), iso(now())
-                        def review(d):
-                            item = next(x for x in d['notes'] if x['id']==nid)
-                            item['status'] = result
-                            d['reviews'].append({'id':rid,'note_id':nid,'title':item['title'],'subject':item['subject'],
-                                'day':studied_day(d),'at':when,'result':result})
-                        save(review)
+def countdown(data):
+    future=sorted([e for e in data['exams'] if e['day']>=today().isoformat()],key=lambda x:x['day'])
+    for exam in future:
+        left=(date.fromisoformat(exam['day'])-today()).days
+        count='D-DAY' if left==0 else f'D-{left}'
+        st.write(f'{count} · {exam["subject"]} {exam["name"]}'+(' · 오답 집중 복습' if left<=3 else ''))
+    return {e['subject'] for e in future if 0<=(date.fromisoformat(e['day'])-today()).days<=3}
 
+# Browser timer updates every second. Python stores timestamps on every start/stop.
+# The component only displays elapsed time; it is not the source of saved durations.
+def clock(seconds, running):
+    theme=st.session_state.theme
+    html='''<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+body{margin:0;background:transparent;color:#101010;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif}
+@media(prefers-color-scheme:dark){body{color:#f5f5f5}}
+#clock{font-size:clamp(42px,13vw,66px);font-weight:700;text-align:center;letter-spacing:1px;font-variant-numeric:tabular-nums;padding:14px 0}
+</style></head><body><div id="clock"></div><script>
+const initial=SECONDS,active=RUNNING,started=performance.now();
+function render(){const s=Math.max(0,Math.floor(initial+(active?(performance.now()-started)/1000:0)));document.getElementById('clock').textContent=[Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(x=>String(x).padStart(2,'0')).join(':');}
+render();setInterval(render,200);
+</script></body></html>'''.replace('SECONDS',str(float(seconds))).replace('RUNNING','true' if running else 'false')
+    if theme!='기기 설정':
+        html=html.replace('</style>',f'body{{color:{"#f5f5f5" if theme=="어둡게" else "#101010"}!important}}</style>')
+    components.html(html,height=110,scrolling=False)
+
+@st.fragment(run_every='1s')
+def timer_screen():
+    d=st.session_state.records
+    at=now()
+    day=study_day(d)
+    running=next((s for s in d['segments'] if not s['end']),None)
+    total=totals(d,at).get(day,0)
+    elapsed=sum(sec for s in d['segments'] if s['cycle']==d['cycle'] for key,sec in portions(s,at) if d['mode']=='manual' or key==today().isoformat())
+    st.caption(datetime.fromisoformat(day).strftime('%m. %d')+' · '+('공부 중' if running else '일시정지'))
+    clock(elapsed if student else total, bool(running) if student else bool(running and study_day(d)==day))
+    st.caption(f'공부일 누적 {fmt(total)} · '+('자동 마감' if d['mode']=='auto' else '직접 마감'))
+    if student:
+        a,b=st.columns(2)
+        if a.button('일시정지',disabled=not running,use_container_width=True):
+            stop_timer(d,now())
+            rerun()
+        if d['mode']=='manual' and b.button('오늘 공부 끝',use_container_width=True,type='primary'):
+            finish_day(d,now())
+            rerun()
+        content=st.text_input('학습 내용',placeholder='지금 공부할 내용을 적어 주세요',key='study_content',max_chars=500)
+    else:
+        content=''
+    for i,subject in enumerate(d['subjects']):
+        subject_seconds=sum(sec for s in d['segments'] if s['subject']==subject for key,sec in portions(s,at) if key==day)
+        cols=st.columns([.65,2.4,1.6])
+        active=bool(running and running['subject']==subject)
         if student:
+            if cols[0].button('Ⅱ' if active else '▶',key='start_'+str(i),type='primary' if active else 'secondary',use_container_width=True):
+                if active:
+                    stop_timer(d,now())
+                else:
+                    start_subject(d,subject,content.strip(),now())
+                rerun()
+        else:
+            cols[0].write('•')
+        cols[1].markdown('<div class="subject-name">'+escape(subject)+'</div>',unsafe_allow_html=True)
+        cols[2].write(fmt(subject_seconds))
+    monday=today()-timedelta(days=today().weekday())
+    weekly=sum(totals(d,at).get((monday+timedelta(days=i)).isoformat(),0) for i in range(7))
+    st.caption('이번 주 '+fmt(weekly)+' · 이해 완료 '+str(sum(n['status']=='이해 완료' for n in d['notes']))+'개')
+
+with st.container(key='workspace'):
+    screen=st.session_state.screen
+    if screen=='timer':
+        timer_screen()
+
+    elif screen=='calendar':
+        if 'month' not in st.session_state:
+            st.session_state.month=today().replace(day=1)
+        month=st.session_state.month
+        left,middle,right=st.columns([1,4,1])
+        if left.button('‹',key='prev_month',use_container_width=True):
+            st.session_state.month=(month-timedelta(days=1)).replace(day=1)
+            rerun()
+        middle.subheader(f'{month.year}년 {month.month}월')
+        if right.button('›',key='next_month',use_container_width=True):
+            st.session_state.month=(month.replace(day=28)+timedelta(days=4)).replace(day=1)
+            rerun()
+        daily=totals(data,now())
+        selected=st.session_state.get('selected_day',today().isoformat())
+        with st.container(key='calgrid'):
+            for col,label in zip(st.columns(7),'월화수목금토일'):
+                col.caption(label)
+            for week in calendar.Calendar(0).monthdatescalendar(month.year,month.month):
+                for col,day in zip(st.columns(7),week):
+                    seconds=daily.get(day.isoformat(),0)
+                    text=str(day.day)
+                    if seconds:
+                        text+=f'\n{int(seconds)//3600}h{int(seconds)%3600//60:02}'
+                    if day.isoformat() in data['stamps']:
+                        text+='\n◎'
+                    if col.button(text,key='day_'+day.isoformat(),disabled=day.month!=month.month,type='primary' if day.isoformat()==selected else 'secondary',use_container_width=True):
+                        st.session_state.selected_day=day.isoformat()
+                        rerun()
+        st.markdown('<div class="rule"></div>',unsafe_allow_html=True)
+        day_details(data,date.fromisoformat(st.session_state.get('selected_day',today().isoformat())))
+
+    elif screen=='notes':
+        st.subheader('오답노트')
+        urgent=countdown(data)
+        if student:
+            # Both controls visible immediately: no hidden camera/upload chooser.
+            st.markdown('**틀린 문제 사진**')
+            uploaded=st.file_uploader('문제 사진 업로드',type=['png','jpg','jpeg','webp'],key='problem_upload')
+            captured=st.camera_input('문제 직접 촬영',key='problem_camera')
+            with st.form('new_note',clear_on_submit=True):
+                subj=st.selectbox('과목',data['subjects'])
+                source=st.selectbox('문제 구분',['학교 시험','기출·시험 대비 문제'])
+                title=st.text_input('문제명',max_chars=150)
+                problem=st.text_area('문제 내용·메모',height=80,max_chars=8000)
+                interpretation=st.text_area('틀린 관점·해석의 오류',height=90,max_chars=4000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?')
+                preparation=st.text_area('학습·시험 준비에서 부족했던 점',height=90,max_chars=4000)
+                concept=st.text_area('부족했던 개념',height=80,max_chars=4000)
+                cause=st.multiselect('틀린 원인',CAUSES)
+                extra=st.text_input('원인 추가 설명',max_chars=2000)
+                answer=st.text_area('정답 및 풀이·다음 대비 방법',height=100,max_chars=8000)
+                exam_date=st.date_input('이 과목 시험 날짜',value=None)
+                if st.form_submit_button('오답 저장',type='primary',use_container_width=True):
+                    photo=captured if captured is not None else uploaded
+                    if not title.strip() or not interpretation.strip() or not preparation.strip() or not answer.strip() or not cause:
+                        st.error('문제명·관점 오류·준비 부족·풀이와 틀린 원인을 작성해 주세요. 해당 없으면 “해당 없음”으로 적어 주세요.')
+                    elif not problem.strip() and photo is None:
+                        st.error('문제 사진을 넣거나 문제 내용을 작성해 주세요.')
+                    elif photo is not None and photo.size>10*1024*1024:
+                        st.error('사진은 10MB 이하로 올려 주세요.')
+                    else:
+                        data['notes'].append(dict(id=uid(),subject=subj,source=source,title=title.strip(),problem=problem.strip(),
+                            interpretation=interpretation.strip(),preparation=preparation.strip(),concept=concept.strip(),causes=cause,
+                            extra=extra.strip(),answer=answer.strip(),status='복습 필요',day=study_day(data),
+                            photo=photo.getvalue() if photo is not None else None))
+                        if exam_date is not None and not any(e['subject']==subj and e['day']==exam_date.isoformat() for e in data['exams']):
+                            data['exams'].append(dict(id=uid(),subject=subj,name='시험',day=exam_date.isoformat()))
+                        st.session_state.pop('problem_upload',None)
+                        st.session_state.pop('problem_camera',None)
+                        rerun()
+        st.markdown('**복습 목록**')
+        filter_name=st.selectbox('표시할 오답',['복습 필요','시험 직전 복습','전체 기록'],key='note_filter')
+        notes=[n for n in data['notes'] if filter_name=='전체 기록' or n['status']=='복습 필요']
+        if filter_name=='시험 직전 복습':
+            notes=[n for n in notes if n['subject'] in urgent]
+        notes.sort(key=lambda n:(n['subject'] not in urgent,n['day']))
+        st.caption(f'복습 필요 {sum(n["status"]=="복습 필요" for n in data["notes"])}개 · 이해 완료 {sum(n["status"]=="이해 완료" for n in data["notes"])}개')
+        if not notes:
+            st.write('표시할 오답이 없습니다.')
+        for note in notes:
             with st.container(border=True):
-                st.markdown('＋ 오답 작성')
-                with st.form('new_note', clear_on_submit=True):
-                    source = st.radio('문제 구분', ['학교 시험','기출·시험 대비 문제'], horizontal=True)
-                    subj = st.selectbox('오답 과목', SUBJECTS)
-                    title = st.text_input('문제명', max_chars=150)
-                    problem = st.text_area('문제 내용', max_chars=8000)
-                    answer = st.text_area('정답 및 풀이', max_chars=8000)
-                    interpretation = st.text_area('문제를 잘못 해석한 부분', help='해당 없으면 “해당 없음”이라고 적어 주세요.', max_chars=4000)
-                    concept = st.text_area('개념이 부족했던 부분', max_chars=4000)
-                    preparation = st.text_area('시험 준비에서 부족했던 점', max_chars=4000)
-                    reasons = st.multiselect('틀린 원인 (복수 선택)', REASONS)
-                    extra = st.text_area('원인 추가 설명', max_chars=4000)
-                    if st.form_submit_button('오답 저장', type='primary'):
-                        if not all(x.strip() for x in [title,problem,answer,interpretation,concept,preparation]) or not reasons:
-                            st.error('문제명·문제·풀이·세 가지 분석과 틀린 원인을 모두 입력해 주세요. 해당 없는 분석에는 “해당 없음”이라고 적어 주세요.')
-                        else:
-                            entry = dict(id=uid(),source=source,subject=subj,title=title.strip(),problem=problem.strip(),answer=answer.strip(),
-                                interpretation=interpretation.strip(),concept=concept.strip(),preparation=preparation.strip(),reasons=reasons,extra=extra.strip(),status='복습 필요')
-                            def add_note(d):
-                                item = dict(entry, created_day=studied_day(d), created_at=iso(now()))
-                                d['notes'].append(item)
-                            save(add_note)
+                st.markdown('**'+note['subject']+' · '+note['title']+'**')
+                st.caption(note['source']+' · '+note['status']+' · '+note['day'])
+                if note['photo']:
+                    st.image(note['photo'],use_container_width=True)
+                for label,key in [('문제 내용','problem'),('틀린 관점·해석의 오류','interpretation'),('학습·시험 대비 부족','preparation'),('부족했던 개념','concept'),('원인 추가 설명','extra'),('정답 및 풀이','answer')]:
+                    if note[key]:
+                        st.write(label+'\n\n'+note[key])
+                st.caption('틀린 원인: '+', '.join(note['causes']))
+                if student:
+                    status=st.selectbox('복습 상태',['복습 필요','이해 완료','이미 아는 유형'],index=['복습 필요','이해 완료','이미 아는 유형'].index(note['status']),key='status_'+note['id'])
+                    if st.button('복습 결과 저장',key='save_'+note['id'],use_container_width=True):
+                        note['status']=status
+                        data['reviews'].append(dict(id=uid(),note_id=note['id'],title=note['title'],day=study_day(data),result=status))
+                        rerun()
 
-    elif menu=='스탬프':
-        st.subheader('스탬프 확인')
-        at=now()
-        daily=totals(state,at)
-        selected_date=st.date_input('확인할 날짜',value=today(),max_value=today(),key='stamp_date')
-        st.session_state.selected_day=selected_date.isoformat()
-        selected = st.session_state.get('selected_day', today().isoformat())
-        week_start = today()-timedelta(days=today().weekday())
-        week_days = [(week_start+timedelta(days=i)).isoformat() for i in range(7)]
-        stamp_count = sum(d in state['stamps'] for d in week_days)
-        week_seconds = sum(daily.get(d,0) for d in week_days)
-        review_count = sum(n['status']=='이해 완료' for n in state['notes'])
-        a,b,c = st.columns(3)
-        a.metric('이번 주 공부', fmt(week_seconds))
-        b.metric('이해 완료 오답', f'{review_count}개')
-        c.metric('이번 주 스탬프', f'{stamp_count}/7')
-        st.caption('월요일~일요일 · '+'  '.join(f'{label}{"✅" if d in state["stamps"] else "▫️"}' for label,d in zip('월화수목금토일',week_days)))
-        if stamp_count == 7:
-            st.success('이번 주 용돈 조건 달성!')
+    elif screen=='stamps':
+        st.subheader('이번 주 확인 도장')
+        monday=today()-timedelta(days=today().weekday())
+        days=[monday+timedelta(days=i) for i in range(5)]
+        count=sum(day.isoformat() in data['stamps'] for day in days)
+        st.write(f'월요일부터 금요일까지 · {count}/5')
+        with st.container(key='stampgrid'):
+            for col,day,label in zip(st.columns(5),days,'월화수목금'):
+                stamped=day.isoformat() in data['stamps']
+                if col.button(('◎ 완료' if stamped else '도장 찍기' if not student else '도장 자리')+'\n'+label+' '+str(day.day),key='stamp_slot_'+str(day),use_container_width=True,type='primary' if stamped else 'secondary',disabled=student or stamped or day>today()):
+                    add_stamp(data,day,now())
+                    st.session_state.stamp_day=day
+                    rerun()
+        if count==5:
+            st.write('이번 주 용돈 조건 달성!')
+        selected=st.date_input('확인할 공부일',value=today(),max_value=today(),key='stamp_day_picker')
+        day_details(data,selected)
+        if not student:
+            if st.button('이 날짜에 도장 찍기',type='primary',disabled=selected.isoformat() in data['stamps'],use_container_width=True):
+                add_stamp(data,selected,now())
+                rerun()
+        else:
+            st.caption('부모님이 확인하면 도장이 표시됩니다.')
 
-        with st.container(border=True):
-            st.markdown(f'📅 {selected} 상세 기록·부모님 확인')
-            st.write('누적 공부 시간: **'+fmt(daily.get(selected,0))+'**')
-            found = False
-            for s in state['segments']:
-                sec = sum(t for d,t in portions(s,at) if d==selected)
-                if sec>0:
-                    found = True
-                    st.write(f'• {s["subject"]} · {fmt(sec)} · {s["content"] or "내용 미입력"}')
-            if not found:
-                st.caption('공부 시간 기록이 없습니다.')
-            for n in state['notes']:
-                if n['created_day']==selected:
-                    st.write(f'✍️ 작성: {n["subject"]} / {n["title"]} · {n["status"]}')
-            for r in state['reviews']:
-                if r['day']==selected:
-                    st.write(f'🔁 복습: {r["subject"]} / {r["title"]} · {r["result"]}')
-            stamp = state['stamps'].get(selected)
-            if stamp:
-                st.success('부모님 확인 완료 · '+dt(stamp['at']).astimezone(KST).strftime('%m/%d %H:%M'))
-                st.caption('스탬프는 해당 시점의 확인 기록입니다. 이후 추가된 공부 내용까지 확인했다는 뜻은 아닙니다.')
-            elif student:
-                st.caption('부모님으로 로그인하면 확인 스탬프를 찍을 수 있습니다.')
-            elif selected > today().isoformat():
-                st.info('미래 날짜에는 스탬프를 찍을 수 없습니다.')
-            else:
-                confirmed = st.checkbox('위 날짜의 공부 시간·학습 내용·오답 기록을 확인했습니다.')
-                if st.button('부모님 확인 스탬프', disabled=not confirmed, type='primary'):
-                    stamp_at = iso(now())
-                    def stamp_day(d):
-                        if selected not in d['stamps']:
-                            d['stamps'][selected] = {'at':stamp_at}
-                    save(stamp_day, 'parent')
-
-    elif menu=='설정':
-        st.subheader('화면·접속 설정')
-        selected_theme=st.radio('테마',['기기 설정','밝게','어둡게'],index=['기기 설정','밝게','어둡게'].index(st.session_state.get('theme','기기 설정')),key='theme_input',horizontal=True)
-        if selected_theme!=st.session_state.get('theme','기기 설정'):
-            st.session_state.theme=selected_theme
-            st.rerun()
+    elif screen=='settings':
+        st.subheader('설정')
+        theme=st.selectbox('화면 테마',['기기 설정','밝게','어둡게'],index=['기기 설정','밝게','어둡게'].index(st.session_state.theme))
+        if theme!=st.session_state.theme:
+            st.session_state.theme=theme
+            rerun()
         if st.button('학생·부모님 전환',use_container_width=True):
             st.session_state.pop('role',None)
             st.session_state.pop('parent_login',None)
-            st.rerun()
-        with st.container(border=True):
-            st.markdown('시험 일정·성적 변화')
-            for e in sorted(state['exams'], key=lambda x:x['day']):
-                st.write(f'{e["day"]} · {e["subject"]} · {e["name"]}')
-                if student and st.button('일정 삭제', key='del_exam_'+e['id']):
-                    eid = e['id']
-                    save(lambda d: d.update(exams=[x for x in d['exams'] if x['id']!=eid]))
-            if student:
-                with st.form('exam'):
-                    exam_subj = st.selectbox('시험 과목', SUBJECTS)
-                    exam_name = st.text_input('시험명', max_chars=150)
-                    exam_day = st.date_input('시험 날짜')
-                    if st.form_submit_button('시험 일정 등록'):
-                        eid = uid()
-                        if not exam_name.strip():
-                            st.error('시험명을 입력해 주세요.')
+            rerun()
+        if student:
+            with st.form('add_subject',clear_on_submit=True):
+                new_subject=st.text_input('과목 추가',max_chars=30)
+                if st.form_submit_button('과목 추가',use_container_width=True):
+                    if new_subject.strip() and new_subject.strip() not in data['subjects']:
+                        data['subjects'].append(new_subject.strip())
+                        rerun()
+            with st.form('day_mode'):
+                mode=st.selectbox('공부 시간 마감',['자동 마감','직접 마감'],index=0 if data['mode']=='auto' else 1)
+                st.caption('자동: 자정 기준으로 날짜별 분할 · 직접: 오늘 공부 끝을 누를 때 마감')
+                if st.form_submit_button('마감 방식 저장',use_container_width=True):
+                    new='auto' if mode=='자동 마감' else 'manual'
+                    if new!=data['mode']:
+                        if any(not s['end'] for s in data['segments']):
+                            st.error('실행 중인 공부를 먼저 일시정지해 주세요.')
+                        elif data['mode']=='manual' and data['active_day']:
+                            st.error('오늘 공부 끝을 누른 후 변경해 주세요.')
                         else:
-                            save(lambda d:d['exams'].append({'id':eid,'subject':exam_subj,'name':exam_name.strip(),'day':exam_day.isoformat()}))
-            st.markdown('**성적 성장 기록**')
-            st.caption('초기 참고값은 1학기 평균 약 2.0, 중간고사 약 1.8입니다. 시험의 범위·난도·산출 방식이 다르면 직접 비교에 한계가 있습니다.')
-            grades = [g for g in state['grades'] if not g.get('date')] + sorted([g for g in state['grades'] if g.get('date')],key=lambda g:g['date'])
-            previous = None
-            for g in grades:
-                change = ''
-                if previous is not None:
-                    delta = previous-g['value']
-                    change = f' · {abs(delta):.2f}등급 '+('향상' if delta>0 else '하락' if delta<0 else '유지')
-                st.write(f'{g.get("date") or "참고"} / {g["name"]}: **{g["value"]:.2f}등급**{change}')
-                previous = g['value']
-            if state.get('target') is not None and previous is not None:
-                gap = previous-state['target']
-                st.write(f'목표 {state["target"]:.2f}등급 · '+(f'최근 기록에서 {gap:.2f}등급 향상 필요' if gap>0 else '최근 기록 기준 목표 범위 도달'))
-            else:
-                st.caption('설정에서 목표 등급을 직접 정해 주세요.')
-            st.info('서울 소재 대학 진학을 위한 성장 참고 기록입니다. 특정 등급만으로 대학 합격이 보장되지 않으며 전형·교과·활동 등 여러 요소를 함께 살펴야 합니다.')
-            if student:
-                with st.form('grade'):
-                    grade_name = st.text_input('성적 기록명 (과목·평균 여부를 포함)', max_chars=150)
-                    grade_date = st.date_input('시험/성적 날짜')
-                    grade_value = st.number_input('등급 (작을수록 향상)', min_value=1.0,max_value=9.0,value=1.8,step=.1,format='%.2f')
-                    if st.form_submit_button('성적 추가'):
-                        gid = uid()
-                        if not grade_name.strip():
-                            st.error('성적 기록명을 입력해 주세요.')
-                        else:
-                            save(lambda d:d['grades'].append({'id':gid,'name':grade_name.strip(),'date':grade_date.isoformat(),'value':grade_value}))
-
-        with st.container(border=True):
-            st.markdown('설정·QR 접속')
-            if student:
-                with st.form('settings'):
-                    target = st.number_input('목표 등급', min_value=1.0,max_value=9.0,value=float(state.get('target') or 1.5),step=.1,format='%.2f')
-                    mode_label = st.radio('하루 공부 마감 방식', ['자동 마감','직접 마감'],index=0 if state['mode']=='auto' else 1)
-                    st.caption('자동: 한국 시간 자정 기준으로 날짜별 분할. 직접: 오늘 공부 끝을 누를 때까지 시작한 공부일에 합산. 자동→직접은 일시정지 후, 직접→자동은 오늘 공부 끝을 누른 후 변경하세요. 기존 달력 기록은 유지됩니다.')
-                    if st.form_submit_button('설정 저장'):
-                        mode = 'auto' if mode_label=='자동 마감' else 'manual'
-                        def settings(d):
-                            if mode!=d['mode']:
-                                if any(not x.get('end') for x in d['segments']):
-                                    raise StorageError('마감 방식 변경 전 일시정지해 주세요. 직접 마감 중이면 오늘 공부 끝을 눌러 주세요.')
-                                if d['mode']=='manual' and d.get('active_day'):
-                                    raise StorageError('직접 마감 중입니다. 오늘 공부 끝을 누른 후 변경해 주세요.')
-                                d['cycle']=uid()
-                                d['active_day']=None
-                            d.update(mode=mode,target=target)
-                        save(settings)
-            app_url = str(option('APP_URL','')).strip()
-            app_url = st.text_input('배포된 앱 주소 (QR용)',value=app_url,placeholder='https://앱이름.streamlit.app').strip()
-            if app_url.startswith('https://'):
-                qr = qrcode.make(app_url)
-                buffer = io.BytesIO()
-                qr.save(buffer, format='PNG')
-                st.image(buffer.getvalue(), width=180)
-                st.link_button('배포된 앱 열기', app_url)
-                st.download_button('QR 이미지 다운로드', buffer.getvalue(), file_name='study-app-qr.png',mime='image/png')
-                st.caption('QR에는 앱 주소만 들어갑니다. 비밀번호나 연결 정보는 포함되지 않습니다.')
-            else:
-                st.caption('배포 후 보안 설정의 APP_URL에 https://로 시작하는 실제 앱 주소를 넣으면 QR이 표시됩니다.')
-            st.caption('수행평가용 임시 기록입니다. 학생·부모님 역할 전환은 같은 세션에서 시연하세요. 실제 다중 기기 공유·영구 저장·부모님 신원 인증은 제공하지 않습니다.')
+                            data.update(mode=new,active_day=None,cycle=uid())
+                            rerun()
+            st.markdown('**시험 일정**')
+            countdown(data)
+            with st.form('add_exam',clear_on_submit=True):
+                subject=st.selectbox('시험 과목',data['subjects'])
+                name=st.text_input('시험명',max_chars=100)
+                day=st.date_input('시험 날짜')
+                if st.form_submit_button('시험 등록',use_container_width=True):
+                    if name.strip():
+                        data['exams'].append(dict(id=uid(),subject=subject,name=name.strip(),day=day.isoformat()))
+                        rerun()
+            for exam in data['exams']:
+                if st.button(exam['day']+' '+exam['subject']+' '+exam['name']+' · 삭제',key='delete_'+exam['id'],use_container_width=True):
+                    data['exams']=[e for e in data['exams'] if e['id']!=exam['id']]
+                    rerun()
+            with st.form('goal'):
+                target=st.number_input('목표 등급',min_value=1.,max_value=9.,value=float(data['target'] or 1.5),step=.1)
+                if st.form_submit_button('목표 저장',use_container_width=True):
+                    data['target']=target
+                    rerun()
+            with st.form('grade',clear_on_submit=True):
+                name=st.text_input('성적 기록명 (과목·평균 구분)',max_chars=100)
+                when=st.date_input('성적 날짜')
+                grade=st.number_input('등급',min_value=1.,max_value=9.,value=2.,step=.1)
+                if st.form_submit_button('성적 추가',use_container_width=True):
+                    if name.strip():
+                        data['grades'].append(dict(id=uid(),name=name.strip(),day=when.isoformat(),value=grade))
+                        rerun()
+        else:
+            with st.form('parent_password'):
+                new_pin=st.text_input('새 부모님 비밀번호',type='password')
+                if st.form_submit_button('비밀번호 변경',use_container_width=True):
+                    if len(new_pin)>=4:
+                        st.session_state.parent_pin=new_pin
+                        st.success('변경했습니다.')
+                    else:
+                        st.error('4자 이상 입력해 주세요.')
+        if data['target']:
+            st.write(f'목표 {data["target"]:.2f}등급')
+        previous=None
+        for g in sorted(data['grades'],key=lambda x:x['day']):
+            change=''
+            if previous is not None:
+                delta=previous-g['value']
+                change=f' · {abs(delta):.2f}등급 '+('향상' if delta>0 else '하락' if delta<0 else '유지')
+            st.write(f'{g["day"]} {g["name"]} · {g["value"]:.2f}등급'+change)
+            previous=g['value']
+        if previous is not None and data['target']:
+            gap=previous-data['target']
+            st.write(f'목표까지 {gap:.2f}등급 향상 필요' if gap>0 else '최근 기록 기준 목표 범위 도달')
+        st.caption('시험별 범위·난도에 따라 성적 비교에는 차이가 있습니다. 서울 소재 대학 진학을 위한 학습 목표를 관리합니다.')
+        app_url=st.text_input('QR 접속 주소',value=secret('APP_URL'),placeholder='https://앱이름.streamlit.app')
+        if app_url.startswith('https://'):
+            buf=io.BytesIO()
+            qrcode.make(app_url).save(buf,format='PNG')
+            st.image(buf.getvalue(),width=160)
+            st.download_button('QR 다운로드',buf.getvalue(),file_name='study-qr.png',mime='image/png')
