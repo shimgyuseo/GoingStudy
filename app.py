@@ -551,18 +551,16 @@ with st.container(key='workspace'):
                     except ValueError:
                         st.error('목표 등급은 1~5 사이 숫자로 입력해 주세요. 예: 1.5')
             with st.form('grade',clear_on_submit=True):
-                name=st.text_input('성적 기록명 (과목·평균 구분)',max_chars=100)
-                when=st.date_input('성적 날짜')
                 grade=st.text_input('등급',placeholder='예: 1.8')
                 if st.form_submit_button('성적 추가',use_container_width=True):
                     try:
                         value=float(grade.strip())
-                        if not 1<=value<=5 or not name.strip():
+                        if not 1<=value<=5:
                             raise ValueError
-                        data['grades'].append(dict(id=uid(),name=name.strip(),day=when.isoformat(),value=value))
+                        data['grades'].append(dict(id=uid(),name='성적',day=today().isoformat(),value=value))
                         rerun()
                     except ValueError:
-                        st.error('성적 기록명과 1~5 사이의 등급을 입력해 주세요.')
+                        st.error('1~5 사이의 등급을 입력해 주세요.')
         else:
             with st.form('parent_password'):
                 new_pin=st.text_input('새 부모님 비밀번호',type='password')
