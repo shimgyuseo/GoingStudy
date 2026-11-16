@@ -96,14 +96,23 @@ def authorize(role='student'):
     return st.session_state.get('role') == role
 
 def start_subject(data, subject, content, at):
+    # A new study session replaces the finish/undo state.
+    data.pop('finish_undo', None)
     stop_timer(data, at)
     data['segments'].append(dict(id=uid(), subject=subject, content=content, start=iso(at), end=None,
         day=study_day(data,at), mode='auto', cutoff=data.get('cutoff',0), cycle=data['cycle']))
 
 def finish_day(data, at):
     stop_timer(data, at)
+    data['finish_undo'] = dict(cycle=data['cycle'], day=study_day(data, at))
     data['active_day'] = None
     data['cycle'] = uid()
+
+def undo_finish(data, at):
+    saved = data.pop('finish_undo', None)
+    if saved and saved['day'] == study_day(data, at):
+        data['cycle'] = saved['cycle']
+    # Keep the timer paused: time since finishing must not count as study.
 
 def add_stamp(data, day, at):
     key = day.isoformat()
@@ -273,14 +282,20 @@ def home_screen():
     st.caption(f'공부일 {day} · '+('공부 중' if running else '정지'))
     clock(elapsed if student else totals(data,at).get(day,0),bool(running))
     if student:
-        controls=st.columns(3 if data['cutoff'] else 2)
+        if data.get('finish_undo', {}).get('day') != day:
+            data.pop('finish_undo', None)
+        controls=st.columns(3)
         if controls[0].button('시작',type='primary',disabled=bool(running),use_container_width=True):
             start_subject(data,st.session_state.get('home_subject',data['subjects'][0]),st.session_state.get('home_content','').strip(),now())
             rerun()
         if controls[1].button('일시정지',disabled=not running,use_container_width=True):
             stop_timer(data,now())
             rerun()
-        if data['cutoff'] and controls[2].button('오늘 공부 끝',use_container_width=True):
+        if data.get('finish_undo'):
+            if controls[2].button('실행 취소',use_container_width=True):
+                undo_finish(data,now())
+                rerun()
+        elif controls[2].button('오늘 공부 끝',use_container_width=True):
             finish_day(data,now())
             rerun()
         a,b=st.columns([1,2])
@@ -436,7 +451,7 @@ with st.container(key='workspace'):
             with st.form('day_mode'):
                 minutes=int(data.get('cutoff',0))
                 cutoff_time=st.time_input('하루 공부 마감 기준 시각 (한국 시간)',value=datetime.min.time().replace(hour=minutes//60,minute=minutes%60),step=timedelta(minutes=1))
-                st.caption('기본 00:00. 02:00으로 바꾸면 00:00~01:59 공부는 전날에 합산하고 02:00부터 새 공부일로 계산합니다. 기준 시각을 바꾸면 오늘 공부 끝 버튼도 표시됩니다. 이미 기록된 시간은 기존 기준을 유지합니다.')
+                st.caption('기본 00:00. 02:00으로 바꾸면 00:00~01:59 공부는 전날에 합산하고 02:00부터 새 공부일로 계산합니다. 오늘 공부 끝을 누르면 달력 기록은 유지되고 타이머만 초기화됩니다. 실행 취소로 직전 누적 시간을 복원할 수 있습니다. 이미 기록된 시간은 기존 기준을 유지합니다.')
                 if st.form_submit_button('기준 시각 저장',use_container_width=True):
                     new_cutoff=cutoff_time.hour*60+cutoff_time.minute
                     if new_cutoff!=data['cutoff']:
