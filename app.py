@@ -146,6 +146,13 @@ button p,button span{color:inherit!important}
 button[kind="primary"]{background:var(--accent)!important;border-color:var(--accent)!important;color:var(--bg)!important}
 button:disabled{opacity:.45}
 input,textarea,[data-baseweb="input"],[data-baseweb="base-input"],[data-baseweb="select"]>div,[role="option"],[role="listbox"],[data-baseweb="popover"]{background:var(--soft)!important;color:var(--fg)!important;-webkit-text-fill-color:var(--fg)!important}
+
+/* Keep every editor visible inside the fixed-height mobile workspace. */
+.st-key-workspace > div,.st-key-workspace [data-testid="stVerticalBlock"]{min-height:min-content!important}
+.st-key-workspace [data-testid="stVerticalBlock"] > div{flex-shrink:0!important}
+.st-key-workspace [data-testid="stTextArea"]{display:block!important;visibility:visible!important;min-height:132px!important;height:auto!important;overflow:visible!important;flex-shrink:0!important}
+.st-key-workspace [data-testid="stTextArea"] textarea{display:block!important;visibility:visible!important;min-height:100px!important;height:100px!important;opacity:1!important;border:1px solid var(--line)!important;border-radius:10px!important;resize:vertical!important}
+
 input::placeholder,textarea::placeholder{color:var(--fg)!important;opacity:.5}
 [data-testid="stForm"],[data-testid="stVerticalBlockBorderWrapper"]{border-color:var(--line)!important}
 [data-testid="stAlert"]{background:var(--soft)!important;color:var(--fg)!important;border:1px solid var(--line)}
@@ -268,6 +275,8 @@ def growth_summary(d):
         if d['target']:
             message+=f' · 목표 {d["target"]:.2f}등급'
         st.write(message)
+    elif d.get('target'):
+        st.write(f'목표 {d["target"]:.2f}등급')
     else:
         st.caption('설정에서 목표 등급과 시험 성적을 기록해 주세요.' if student else '아직 등록된 성적이 없습니다.')
     need=sum(n['status']=='복습 필요' for n in d['notes'])
@@ -402,14 +411,14 @@ with st.container(key='workspace'):
             subj=st.selectbox('과목',data['subjects'],key='note_subject')
             source=st.selectbox('문제 구분',['학교 시험','기출·시험 대비 문제'],key='note_source')
             title=st.text_input('문제번호',max_chars=150,key='note_number')
-            problem=st.text_area('문제 내용·메모',key='text_problem',height=180,max_chars=8000)
-            interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=180,max_chars=8000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?')
-            preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=180,max_chars=8000)
-            concept=st.text_area('부족했던 개념',height=180,max_chars=8000,key='note_concept')
-            shortage=st.text_area('부족했던 점',key='text_shortage',height=180,max_chars=8000)
+            problem=st.text_area('문제 내용·메모',key='text_problem',height=100,max_chars=8000)
+            interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=100,max_chars=8000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?')
+            preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=100,max_chars=8000)
+            concept=st.text_area('부족했던 개념',height=100,max_chars=8000,key='note_concept')
+            shortage=st.text_area('부족했던 점',key='text_shortage',height=100,max_chars=8000)
             cause=st.multiselect('틀린 원인',CAUSES,key='note_causes')
-            extra=st.text_area('원인 추가 설명',height=160,max_chars=8000,key='note_other',placeholder='기타를 선택했다면 구체적인 원인을 꼭 적어 주세요. 다른 원인도 자세히 설명할 수 있습니다.')
-            answer=st.text_area('정답 및 풀이·다음 대비 방법',key='text_answer',height=180,max_chars=8000)
+            extra=st.text_area('원인 추가 설명',height=100,max_chars=8000,key='note_other',placeholder='기타를 선택했다면 구체적인 원인을 꼭 적어 주세요. 다른 원인도 자세히 설명할 수 있습니다.')
+            answer=st.text_area('정답 및 풀이·다음 대비 방법',key='text_answer',height=100,max_chars=8000)
             record_date=st.date_input('기록 날짜',value=today(),key='note_record_date')
             if st.button('오답 저장',type='primary',use_container_width=True):
                 photo=st.session_state.get('note_photo')
@@ -504,17 +513,18 @@ with st.container(key='workspace'):
                         else:
                             data.update(cutoff=new_cutoff,mode='auto',active_day=None,cycle=uid())
                             rerun()
+            st.caption('성적은 5등급제 기준입니다. 평균 등급은 소수점으로 입력할 수 있습니다.')
             with st.form('goal'):
                 target=st.text_input('목표 등급',value=str(data['target']) if data['target'] else '',placeholder='예: 1.5')
                 if st.form_submit_button('목표 저장',use_container_width=True):
                     try:
                         value=float(target.strip())
-                        if not 1<=value<=9:
+                        if not 1<=value<=5:
                             raise ValueError
                         data['target']=value
                         rerun()
                     except ValueError:
-                        st.error('목표 등급은 1~9 사이 숫자로 입력해 주세요. 예: 1.5')
+                        st.error('목표 등급은 1~5 사이 숫자로 입력해 주세요. 예: 1.5')
             with st.form('grade',clear_on_submit=True):
                 name=st.text_input('성적 기록명 (과목·평균 구분)',max_chars=100)
                 when=st.date_input('성적 날짜')
@@ -522,12 +532,12 @@ with st.container(key='workspace'):
                 if st.form_submit_button('성적 추가',use_container_width=True):
                     try:
                         value=float(grade.strip())
-                        if not 1<=value<=9 or not name.strip():
+                        if not 1<=value<=5 or not name.strip():
                             raise ValueError
                         data['grades'].append(dict(id=uid(),name=name.strip(),day=when.isoformat(),value=value))
                         rerun()
                     except ValueError:
-                        st.error('성적 기록명과 1~9 사이의 등급을 입력해 주세요.')
+                        st.error('성적 기록명과 1~5 사이의 등급을 입력해 주세요.')
         else:
             with st.form('parent_password'):
                 new_pin=st.text_input('새 부모님 비밀번호',type='password')
