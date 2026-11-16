@@ -179,7 +179,7 @@ if st.session_state.theme != '기기 설정':
     dark = st.session_state.theme=='어둡게'
     bg, fg, accent, line, soft = ('#111','#f5f5f5','#ff9b43','#303030','#1c1c1c') if dark else ('#fff','#101010','#bc4900','#dedede','#f5f5f5')
     st.markdown(f'<style>:root{{--bg:{bg}!important;--fg:{fg}!important;--accent:{accent}!important;--line:{line}!important;--soft:{soft}!important;color-scheme:{"dark" if dark else "light"}}}</style>', unsafe_allow_html=True)
-st.title('나의 공부 성장 기록장')
+st.title('자녀의 공부 성장 기록장' if st.session_state.get('role')=='parent' else '나의 공부 성장 기록장')
 
 if 'role' not in st.session_state:
     with st.container(key='workspace'):
@@ -197,7 +197,8 @@ if 'role' not in st.session_state:
             with st.form('parent_login_form'):
                 pin=st.text_input('부모님 비밀번호',type='password')
                 if not secret('PARENT_PIN'):
-                    st.caption('기본 비밀번호 2468 · 설정에서 변경할 수 있습니다.')
+                    if st.session_state.parent_pin=='2468':
+                        st.caption('기본 비밀번호 2468 · 설정에서 변경할 수 있습니다.')
                 if st.form_submit_button('접속',type='primary',use_container_width=True):
                     expected=st.session_state.get('parent_pin',secret('PARENT_PIN','2468'))
                     if hmac.compare_digest(pin,expected):
@@ -244,7 +245,7 @@ def countdown(data):
     label='D-DAY' if left==0 else f'D-{left}' if left>0 else f'D+{-left}'
     st.write(f'시험 {label} · {exam_day}')
     if 0<=left<=3:
-        st.write('시험이 얼마 남지 않았어요. 틀렸던 오답노트를 집중 복습해 주세요!')
+        st.write('자녀의 시험이 3일 이내입니다. 오답 복습 진행 상황을 확인해 주세요.' if st.session_state.get('role')=='parent' else '시험이 얼마 남지 않았어요. 틀렸던 오답노트를 집중 복습해 주세요!')
         return set(data['subjects'])
     return set()
 
@@ -378,7 +379,7 @@ with st.container(key='workspace'):
         home_screen()
 
     elif screen=='notes':
-        st.subheader('오답노트')
+        st.subheader('오답노트' if student else '자녀의 오답·복습 기록')
         urgent=countdown(data)
         if student:
             # Both controls visible immediately: no hidden camera/upload chooser.
@@ -422,12 +423,8 @@ with st.container(key='workspace'):
             with st.container(border=True,key='editor_text_preparation'):
                 st.markdown('**학습·시험 준비에서 부족했던 점**')
                 preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=68,max_chars=8000,label_visibility='collapsed')
-            with st.container(border=True,key='editor_note_concept'):
-                st.markdown('**부족했던 개념**')
-                concept=st.text_area('부족했던 개념',height=68,max_chars=8000,key='note_concept',label_visibility='collapsed')
-            with st.container(border=True,key='editor_text_shortage'):
-                st.markdown('**부족했던 점**')
-                shortage=st.text_area('부족했던 점',key='text_shortage',height=68,max_chars=8000,label_visibility='collapsed')
+            concept=''
+            shortage=''
             cause=st.multiselect('틀린 원인',CAUSES,key='note_causes')
             with st.container(border=True,key='editor_note_other'):
                 st.markdown('**원인 추가 설명**')
@@ -477,7 +474,7 @@ with st.container(key='workspace'):
                         rerun()
 
     elif screen=='stamps':
-        st.subheader('이번 주 확인 도장')
+        st.subheader('이번 주 확인 도장' if student else '자녀의 주간 학습 확인')
         monday=today()-timedelta(days=today().weekday())
         days=[monday+timedelta(days=i) for i in range(7)]
         count=sum(day.isoformat() in data['stamps'] for day in days)
@@ -490,7 +487,7 @@ with st.container(key='workspace'):
                     st.session_state.stamp_day=day
                     rerun()
         if count==7:
-            st.write('이번 주 용돈 조건 달성!')
+            st.write('이번 주 용돈 조건 달성!' if student else '이번 주 7일 확인 완료 · 용돈 약속을 확인해 주세요.')
         selected=st.date_input('확인할 공부일',value=today(),max_value=today(),key='stamp_day_picker')
         day_details(data,selected)
         if not student:
@@ -500,10 +497,10 @@ with st.container(key='workspace'):
         else:
             st.caption('부모님이 확인하면 도장이 표시됩니다.')
 
-        st.markdown('<div style="border:1px solid #ff9838;border-radius:10px;padding:12px;text-align:center;font-weight:700">도장 모아서 용돈 받기!!!</div>',unsafe_allow_html=True)
+        st.markdown('<div style="border:1px solid #ff9838;border-radius:10px;padding:12px;text-align:center;font-weight:700">'+('도장 모아서 용돈 받기!!!' if student else '자녀의 노력을 확인하고 응원 도장을 찍어 주세요!')+'</div>',unsafe_allow_html=True)
 
     elif screen=='settings':
-        st.subheader('설정')
+        st.subheader('설정' if student else '보호자 설정·자녀 성적 확인')
         theme=st.selectbox('화면 테마',['기기 설정','밝게','어둡게'],index=['기기 설정','밝게','어둡게'].index(st.session_state.theme))
         if theme!=st.session_state.theme:
             st.session_state.theme=theme
