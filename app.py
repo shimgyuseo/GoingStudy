@@ -348,9 +348,34 @@ with st.container(key='workspace'):
         urgent=countdown(data)
         if student:
             # Both controls visible immediately: no hidden camera/upload chooser.
-            st.markdown('**틀린 문제 사진**')
-            uploaded=st.file_uploader('문제 사진 업로드',type=['png','jpg','jpeg','webp'],key='problem_upload')
-            captured=st.camera_input('문제 직접 촬영',key='problem_camera')
+            @st.dialog('문제 사진')
+            def photo_picker():
+                choices=st.columns(3)
+                for col,label,kind in zip(choices,['사진 보관함','사진 찍기','파일 선택'],['library','camera','file']):
+                    if col.button(label,use_container_width=True):
+                        st.session_state.photo_source=kind
+                source=st.session_state.get('photo_source')
+                picked=None
+                if source=='camera':
+                    picked=st.camera_input('문제 사진 촬영',key='photo_capture_dialog')
+                elif source in ('library','file'):
+                    picked=st.file_uploader('사진 선택' if source=='library' else '이미지 파일 선택',type=['png','jpg','jpeg','webp'],key='photo_file_'+source)
+                if picked is not None:
+                    if picked.size>10*1024*1024:
+                        st.error('사진은 10MB 이하로 선택해 주세요.')
+                    else:
+                        st.image(picked,use_container_width=True)
+                        if st.button('이 사진 사용',type='primary',use_container_width=True):
+                            st.session_state.note_photo=picked.getvalue()
+                            st.rerun()
+            if st.button('문제 사진',key='open_problem_photo',use_container_width=True):
+                st.session_state.photo_source=None
+                photo_picker()
+            if st.session_state.get('note_photo'):
+                st.image(st.session_state.note_photo,width=160)
+                if st.button('사진 삭제',key='remove_note_photo'):
+                    st.session_state.pop('note_photo',None)
+                    rerun()
             with st.form('new_note',clear_on_submit=True):
                 subj=st.selectbox('과목',data['subjects'])
                 source=st.selectbox('문제 구분',['학교 시험','기출·시험 대비 문제'])
@@ -364,22 +389,21 @@ with st.container(key='workspace'):
                 answer=st.text_area('정답 및 풀이·다음 대비 방법',height=100,max_chars=8000)
                 exam_date=st.date_input('이 과목 시험 날짜',value=None)
                 if st.form_submit_button('오답 저장',type='primary',use_container_width=True):
-                    photo=captured if captured is not None else uploaded
+                    photo=st.session_state.get('note_photo')
                     if not title.strip() or not interpretation.strip() or not preparation.strip() or not answer.strip() or not cause:
                         st.error('문제명·관점 오류·준비 부족·풀이와 틀린 원인을 작성해 주세요. 해당 없으면 “해당 없음”으로 적어 주세요.')
                     elif not problem.strip() and photo is None:
                         st.error('문제 사진을 넣거나 문제 내용을 작성해 주세요.')
-                    elif photo is not None and photo.size>10*1024*1024:
+                    elif photo is not None and len(photo)>10*1024*1024:
                         st.error('사진은 10MB 이하로 올려 주세요.')
                     else:
                         data['notes'].append(dict(id=uid(),subject=subj,source=source,title=title.strip(),problem=problem.strip(),
                             interpretation=interpretation.strip(),preparation=preparation.strip(),concept=concept.strip(),causes=cause,
                             extra=extra.strip(),answer=answer.strip(),status='복습 필요',day=study_day(data),
-                            photo=photo.getvalue() if photo is not None else None))
+                            photo=photo))
                         if exam_date is not None and not any(e['subject']==subj and e['day']==exam_date.isoformat() for e in data['exams']):
                             data['exams'].append(dict(id=uid(),subject=subj,name='시험',day=exam_date.isoformat()))
-                        st.session_state.pop('problem_upload',None)
-                        st.session_state.pop('problem_camera',None)
+                        st.session_state.pop('note_photo',None)
                         rerun()
         st.markdown('**복습 목록**')
         filter_name=st.selectbox('표시할 오답',['복습 필요','시험 직전 복습','전체 기록'],key='note_filter')
