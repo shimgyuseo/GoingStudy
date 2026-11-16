@@ -327,6 +327,15 @@ def home_screen():
             for col,day in zip(st.columns(7),week):
                 seconds=daily.get(day.isoformat(),0)
                 text=str(day.day)
+                key_day=day.isoformat()
+                if data.get('exam_day')==key_day:
+                    text+='\n시험'
+                elif data.get('exam_day') and 1<=(date.fromisoformat(data['exam_day'])-day).days<=3:
+                    text+='\n복습 D-'+str((date.fromisoformat(data['exam_day'])-day).days)
+                for label,records in [('오답',data['notes']),('복습',data['reviews']),('성적',data['grades'])]:
+                    count=sum(r['day']==key_day for r in records)
+                    if count:
+                        text+='\n'+label+' '+str(count)
                 if seconds:
                     text+='\n'+fmt(seconds)
                 if day.isoformat() in data['stamps']:
@@ -347,6 +356,10 @@ def home_screen():
         if st.button('이 공부일 확인 도장',disabled=selected>today() or selected.isoformat() in data['stamps'],use_container_width=True,type='primary'):
             add_stamp(data,selected,now())
             rerun()
+
+for draft_key in ['note_other','text_problem','text_interpretation','text_preparation','note_concept','text_shortage','text_answer','note_number','note_causes']:
+    if draft_key in st.session_state:
+        st.session_state[draft_key]=st.session_state[draft_key]
 
 with st.container(key='workspace'):
     screen=st.session_state.screen
@@ -393,8 +406,10 @@ with st.container(key='workspace'):
             interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=100,max_chars=8000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?')
             preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=100,max_chars=8000)
             concept=st.text_area('부족했던 개념',height=80,max_chars=4000,key='note_concept')
+            shortage=st.text_area('부족했던 점',key='text_shortage',height=100,max_chars=8000)
             cause=st.multiselect('틀린 원인',CAUSES,key='note_causes')
-            extra=st.text_input('기타 원인을 직접 작성해 주세요',max_chars=2000,key='note_other') if '기타' in cause else ''
+            other_text=st.text_input('기타 원인을 직접 작성해 주세요',max_chars=2000,key='note_other',disabled='기타' not in cause)
+            extra=other_text if '기타' in cause else ''
             answer=st.text_area('정답 및 풀이·다음 대비 방법',key='text_answer',height=100,max_chars=8000)
             record_date=st.date_input('기록 날짜',value=today(),key='note_record_date')
             if st.button('오답 저장',type='primary',use_container_width=True):
@@ -407,7 +422,7 @@ with st.container(key='workspace'):
                     st.error('문제 사진이나 문제 내용를 넣어 주세요.')
                 else:
                     data['notes'].append(dict(id=uid(),subject=subj,source=source,title=title.strip(),problem=problem.strip(),
-                        interpretation=interpretation.strip(),preparation=preparation.strip(),concept=concept.strip(),causes=cause,
+                        interpretation=interpretation.strip(),preparation=preparation.strip(),concept=concept.strip(),shortage=shortage.strip(),causes=list(cause),
                         extra=extra.strip(),answer=answer.strip(),status='복습 필요',day=record_date.isoformat(),photo=photo))
                     st.session_state.pop('note_photo',None)
                     st.success('오답을 저장했습니다.')
@@ -426,8 +441,8 @@ with st.container(key='workspace'):
                 st.caption(note['source']+' · '+note['status']+' · '+note['day'])
                 if note['photo']:
                     st.image(note['photo'],use_container_width=True)
-                for label,key in [('문제 내용','problem'),('틀린 관점·해석의 오류','interpretation'),('학습·시험 대비 부족','preparation'),('부족했던 개념','concept'),('원인 추가 설명','extra'),('정답 및 풀이','answer')]:
-                    if note[key]:
+                for label,key in [('문제 내용','problem'),('틀린 관점·해석의 오류','interpretation'),('학습·시험 대비 부족','preparation'),('부족했던 개념','concept'),('부족했던 점','shortage'),('원인 추가 설명','extra'),('정답 및 풀이','answer')]:
+                    if note.get(key):
                         st.write(label+'\n\n'+note[key])
                 st.caption('틀린 원인: '+', '.join(note['causes']))
                 if student:
@@ -491,18 +506,29 @@ with st.container(key='workspace'):
                             data.update(cutoff=new_cutoff,mode='auto',active_day=None,cycle=uid())
                             rerun()
             with st.form('goal'):
-                target=st.number_input('목표 등급',min_value=1.,max_value=9.,value=float(data['target'] or 1.5),step=.1)
+                target=st.text_input('목표 등급',value=str(data['target']) if data['target'] else '',placeholder='예: 1.5')
                 if st.form_submit_button('목표 저장',use_container_width=True):
-                    data['target']=target
-                    rerun()
+                    try:
+                        value=float(target.strip())
+                        if not 1<=value<=9:
+                            raise ValueError
+                        data['target']=value
+                        rerun()
+                    except ValueError:
+                        st.error('목표 등급은 1~9 사이 숫자로 입력해 주세요. 예: 1.5')
             with st.form('grade',clear_on_submit=True):
                 name=st.text_input('성적 기록명 (과목·평균 구분)',max_chars=100)
                 when=st.date_input('성적 날짜')
-                grade=st.number_input('등급',min_value=1.,max_value=9.,value=2.,step=.1)
+                grade=st.text_input('등급',placeholder='예: 1.8')
                 if st.form_submit_button('성적 추가',use_container_width=True):
-                    if name.strip():
-                        data['grades'].append(dict(id=uid(),name=name.strip(),day=when.isoformat(),value=grade))
+                    try:
+                        value=float(grade.strip())
+                        if not 1<=value<=9 or not name.strip():
+                            raise ValueError
+                        data['grades'].append(dict(id=uid(),name=name.strip(),day=when.isoformat(),value=value))
                         rerun()
+                    except ValueError:
+                        st.error('성적 기록명과 1~9 사이의 등급을 입력해 주세요.')
         else:
             with st.form('parent_password'):
                 new_pin=st.text_input('새 부모님 비밀번호',type='password')
@@ -525,7 +551,6 @@ with st.container(key='workspace'):
         if previous is not None and data['target']:
             gap=previous-data['target']
             st.write(f'목표까지 {gap:.2f}등급 향상 필요' if gap>0 else '최근 기록 기준 목표 범위 도달')
-        st.caption('시험별 범위·난도에 따라 성적 비교에는 차이가 있습니다. 서울 소재 대학 진학을 위한 학습 목표를 관리합니다.')
         app_url=st.text_input('QR 접속 주소',value=secret('APP_URL'),placeholder='https://앱이름.streamlit.app')
         if app_url.startswith('https://'):
             buf=io.BytesIO()
