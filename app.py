@@ -172,6 +172,16 @@ input::placeholder,textarea::placeholder{color:var(--fg)!important;opacity:.5}
 .st-key-stampgrid button p{font-size:12px!important;white-space:pre-line}
 .st-key-stampgrid button:disabled{opacity:1!important}
 .subject-name{font-size:19px;font-weight:600;margin:9px 0}
+
+/* Dialog owns one native close button; prevent mobile control overlap. */
+[role="dialog"]{width:calc(100vw - 32px)!important;max-width:480px!important;max-height:85dvh!important;overflow-y:auto!important;padding:24px!important;border-radius:20px!important;box-sizing:border-box!important}
+[role="dialog"] [data-testid="stVerticalBlock"]{gap:18px!important}
+[role="dialog"] h2{padding:0 48px 18px 0!important;line-height:1.5!important}
+[role="dialog"] button{min-height:48px!important}
+[role="dialog"] [data-testid="stCameraInput"]{margin-top:12px!important}
+[role="dialog"] [data-testid="stCameraInput"] video{width:100%!important;height:auto!important;max-height:36dvh!important;object-fit:contain!important}
+[role="dialog"] button[aria-label="Close"],[role="dialog"] button[aria-label="Close dialog"]{min-height:36px!important;width:36px!important;padding:4px!important}
+
 .rule{border-top:1px solid var(--line);margin:8px 0}
 '''
 st.markdown('<style>'+css+'</style>', unsafe_allow_html=True)
@@ -197,7 +207,7 @@ if 'role' not in st.session_state:
             with st.form('parent_login_form'):
                 pin=st.text_input('부모님 비밀번호',type='password')
                 if not secret('PARENT_PIN'):
-                    if st.session_state.parent_pin=='2468':
+                    if st.session_state.get('parent_pin','2468')=='2468':
                         st.caption('기본 비밀번호 2468 · 설정에서 변경할 수 있습니다.')
                 if st.form_submit_button('접속',type='primary',use_container_width=True):
                     expected=st.session_state.get('parent_pin',secret('PARENT_PIN','2468'))
@@ -385,9 +395,9 @@ with st.container(key='workspace'):
             # Both controls visible immediately: no hidden camera/upload chooser.
             @st.dialog('문제 사진')
             def photo_picker():
-                choices=st.columns(3)
-                for col,label,kind in zip(choices,['사진 보관함','사진 찍기','파일 선택'],['library','camera','file']):
-                    if col.button(label,use_container_width=True):
+                st.caption('사진을 가져올 방법을 선택해 주세요.')
+                for label,kind in zip(['사진 보관함','사진 찍기','파일 선택'],['library','camera','file']):
+                    if st.button(label,key='photo_source_'+kind,use_container_width=True):
                         st.session_state.photo_source=kind
                 source=st.session_state.get('photo_source')
                 picked=None
