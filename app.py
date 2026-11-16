@@ -147,6 +147,8 @@ button[kind="primary"]{background:var(--accent)!important;border-color:var(--acc
 button:disabled{opacity:.45}
 input,textarea,[data-baseweb="input"],[data-baseweb="base-input"],[data-baseweb="select"]>div,[role="option"],[role="listbox"],[data-baseweb="popover"]{background:var(--soft)!important;color:var(--fg)!important;-webkit-text-fill-color:var(--fg)!important}
 
+[class*="st-key-editor_"]{display:block!important;min-height:175px!important;flex:0 0 auto!important;overflow:visible!important;padding:12px!important}
+[class*="st-key-editor_"] textarea{min-height:110px!important}
 /* Keep every editor visible inside the fixed-height mobile workspace. */
 .st-key-workspace > div,.st-key-workspace [data-testid="stVerticalBlock"]{min-height:min-content!important}
 .st-key-workspace [data-testid="stVerticalBlock"] > div{flex-shrink:0!important}
@@ -411,14 +413,28 @@ with st.container(key='workspace'):
             subj=st.selectbox('과목',data['subjects'],key='note_subject')
             source=st.selectbox('문제 구분',['학교 시험','기출·시험 대비 문제'],key='note_source')
             title=st.text_input('문제번호',max_chars=150,key='note_number')
-            problem=st.text_area('문제 내용·메모',key='text_problem',height=100,max_chars=8000)
-            interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=100,max_chars=8000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?')
-            preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=100,max_chars=8000)
-            concept=st.text_area('부족했던 개념',height=100,max_chars=8000,key='note_concept')
-            shortage=st.text_area('부족했던 점',key='text_shortage',height=100,max_chars=8000)
+            with st.container(border=True,key='editor_text_problem'):
+                st.markdown('**문제 내용·메모**')
+                problem=st.text_area('문제 내용·메모',key='text_problem',height=100,max_chars=8000,label_visibility='collapsed')
+            with st.container(border=True,key='editor_text_interpretation'):
+                st.markdown('**틀린 관점·해석의 오류**')
+                interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=100,max_chars=8000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?',label_visibility='collapsed')
+            with st.container(border=True,key='editor_text_preparation'):
+                st.markdown('**학습·시험 준비에서 부족했던 점**')
+                preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=100,max_chars=8000,label_visibility='collapsed')
+            with st.container(border=True,key='editor_note_concept'):
+                st.markdown('**부족했던 개념**')
+                concept=st.text_area('부족했던 개념',height=100,max_chars=8000,key='note_concept',label_visibility='collapsed')
+            with st.container(border=True,key='editor_text_shortage'):
+                st.markdown('**부족했던 점**')
+                shortage=st.text_area('부족했던 점',key='text_shortage',height=100,max_chars=8000,label_visibility='collapsed')
             cause=st.multiselect('틀린 원인',CAUSES,key='note_causes')
-            extra=st.text_area('원인 추가 설명',height=100,max_chars=8000,key='note_other',placeholder='기타를 선택했다면 구체적인 원인을 꼭 적어 주세요. 다른 원인도 자세히 설명할 수 있습니다.')
-            answer=st.text_area('정답 및 풀이·다음 대비 방법',key='text_answer',height=100,max_chars=8000)
+            with st.container(border=True,key='editor_note_other'):
+                st.markdown('**원인 추가 설명**')
+                extra=st.text_area('원인 추가 설명',height=100,max_chars=8000,key='note_other',placeholder='기타를 선택했다면 구체적인 원인을 꼭 적어 주세요. 다른 원인도 자세히 설명할 수 있습니다.',label_visibility='collapsed')
+            with st.container(border=True,key='editor_text_answer'):
+                st.markdown('**정답 및 풀이·다음 대비 방법**')
+                answer=st.text_area('정답 및 풀이·다음 대비 방법',key='text_answer',height=100,max_chars=8000,label_visibility='collapsed')
             record_date=st.date_input('기록 날짜',value=today(),key='note_record_date')
             if st.button('오답 저장',type='primary',use_container_width=True):
                 photo=st.session_state.get('note_photo')
