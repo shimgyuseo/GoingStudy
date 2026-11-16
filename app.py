@@ -17,7 +17,7 @@ KST = ZoneInfo('Asia/Seoul')
 UTC = timezone.utc
 BASIC = ['수학', '국어', '영어', '사회', '과학', '한국사']
 CAUSES = ['개념 부족', '관점·해석 오류', '계산 실수', '암기 부족', '시간 부족', '기타']
-MENUS = [('notes','오답노트'),('calendar','달력'),('timer','공부시간'),('stamps','스탬프'),('settings','설정')]
+MENUS = [('home','성장기록'),('notes','오답노트'),('stamps','스탬프'),('settings','설정')]
 st.set_page_config(page_title='나의 공부 성장 기록장', page_icon='📖', layout='centered')
 
 def now():
@@ -44,12 +44,15 @@ def secret(key, default=''):
 
 def empty_data():
     return dict(subjects=BASIC.copy(), segments=[], notes=[], exams=[], reviews=[], stamps={},
-                mode='auto', active_day=None, cycle=uid(), target=None, grades=[])
+                mode='auto', cutoff=0, active_day=None, cycle=uid(), target=None, grades=[])
 
 if 'records' not in st.session_state:
     st.session_state.records = empty_data()
 if 'screen' not in st.session_state:
-    st.session_state.screen = 'timer'
+    st.session_state.screen = 'home'
+if st.session_state.screen in ('timer','calendar'):
+    st.session_state.screen='home'
+st.session_state.records.setdefault('cutoff',0)
 if 'theme' not in st.session_state:
     st.session_state.theme = '기기 설정'
 
@@ -62,10 +65,12 @@ def portions(segment, at):
     if segment['mode'] == 'manual':
         return [(segment['day'], (end-start).total_seconds())]
     out = []
+    cutoff = int(segment.get('cutoff', 0))
     while start < end:
-        day = start.astimezone(KST).date()
-        midnight = datetime.combine(day+timedelta(days=1), datetime.min.time(), KST).astimezone(UTC)
-        stop = min(end, midnight)
+        local = start.astimezone(KST)
+        day = (local-timedelta(minutes=cutoff)).date()
+        boundary = (datetime.combine(day+timedelta(days=1), datetime.min.time(), KST)+timedelta(minutes=cutoff)).astimezone(UTC)
+        stop = min(end, boundary)
         out.append((day.isoformat(), (stop-start).total_seconds()))
         start = stop
     return out
@@ -82,18 +87,18 @@ def stop_timer(data, at):
         if not segment['end']:
             segment['end'] = iso(max(at, datetime.fromisoformat(segment['start'])))
 
-def study_day(data):
-    return data['active_day'] if data['mode']=='manual' and data['active_day'] else today().isoformat()
+def study_day(data, at=None):
+    at = at or now()
+    return (at.astimezone(KST)-timedelta(minutes=int(data.get('cutoff',0)))).date().isoformat()
+
 
 def authorize(role='student'):
     return st.session_state.get('role') == role
 
 def start_subject(data, subject, content, at):
     stop_timer(data, at)
-    if data['mode']=='manual' and not data['active_day']:
-        data['active_day'] = at.astimezone(KST).date().isoformat()
     data['segments'].append(dict(id=uid(), subject=subject, content=content, start=iso(at), end=None,
-        day=study_day(data), mode=data['mode'], cycle=data['cycle']))
+        day=study_day(data,at), mode='auto', cutoff=data.get('cutoff',0), cycle=data['cycle']))
 
 def finish_day(data, at):
     stop_timer(data, at)
@@ -143,7 +148,7 @@ input::placeholder,textarea::placeholder{color:var(--fg)!important;opacity:.5}
 .st-key-workspace [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
 .st-key-calgrid [data-testid="stHorizontalBlock"],.st-key-stampgrid [data-testid="stHorizontalBlock"],.subject-row [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:3px!important}
 .st-key-calgrid [data-testid="stColumn"],.st-key-stampgrid [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
-.st-key-calgrid button{min-height:46px!important;border:0!important;border-radius:8px!important;padding:1px!important}
+.st-key-calgrid button{min-height:44px!important;border:0!important;border-radius:8px!important;padding:1px!important}
 .st-key-calgrid button p{font-size:11px!important;white-space:pre-line!important;line-height:1.25!important}
 .st-key-stampgrid button{aspect-ratio:1;min-height:48px!important;border:1px dashed var(--accent)!important;border-radius:50%!important;padding:2px!important}
 .st-key-stampgrid button p{font-size:12px!important;white-space:pre-line}
@@ -186,9 +191,9 @@ if 'role' not in st.session_state:
 
 student=authorize()
 data=st.session_state.records
-icons={'notes':'▤','calendar':'▦','timer':'◷','stamps':'◎','settings':'⚙'}
+icons={'notes':'▤','home':'▦','stamps':'◎','settings':'⚙'}
 with st.container(key='bottomnav'):
-    for col,(key,label) in zip(st.columns(5),MENUS):
+    for col,(key,label) in zip(st.columns(4),MENUS):
         if col.button(icons[key]+'\n'+label,key='nav_'+key,type='primary' if st.session_state.screen==key else 'secondary',use_container_width=True):
             st.session_state.screen=key
             rerun()
@@ -228,7 +233,7 @@ def clock(seconds, running):
     html='''<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>
 body{margin:0;background:transparent;color:#101010;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif}
 @media(prefers-color-scheme:dark){body{color:#f5f5f5}}
-#clock{font-size:clamp(42px,13vw,66px);font-weight:700;text-align:center;letter-spacing:1px;font-variant-numeric:tabular-nums;padding:14px 0}
+#clock{font-size:clamp(34px,10vw,48px);font-weight:700;text-align:center;letter-spacing:1px;font-variant-numeric:tabular-nums;padding:4px 0}
 </style></head><body><div id="clock"></div><script>
 const initial=SECONDS,active=RUNNING,started=performance.now();
 function render(){const s=Math.max(0,Math.floor(initial+(active?(performance.now()-started)/1000:0)));document.getElementById('clock').textContent=[Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(x=>String(x).padStart(2,'0')).join(':');}
@@ -236,84 +241,92 @@ render();setInterval(render,200);
 </script></body></html>'''.replace('SECONDS',str(float(seconds))).replace('RUNNING','true' if running else 'false')
     if theme!='기기 설정':
         html=html.replace('</style>',f'body{{color:{"#f5f5f5" if theme=="어둡게" else "#101010"}!important}}</style>')
-    components.html(html,height=110,scrolling=False)
+    components.html(html,height=70,scrolling=False)
+
+def growth_summary(d):
+    st.caption('서울 소재 대학 진학을 위한 학습 성장 기록' if student else '자녀의 학습 과정과 성장 확인')
+    latest=sorted(d['grades'],key=lambda g:g['day'])
+    if latest:
+        value=latest[-1]['value']
+        message=f'최근 {value:.2f}등급'
+        if len(latest)>1:
+            delta=latest[-2]['value']-value
+            message+=f' · {abs(delta):.2f}등급 '+('향상' if delta>0 else '하락' if delta<0 else '유지')
+        if d['target']:
+            message+=f' · 목표 {d["target"]:.2f}등급'
+        st.write(message)
+    else:
+        st.caption('설정에서 목표 등급과 시험 성적을 기록해 주세요.' if student else '아직 등록된 성적이 없습니다.')
+    need=sum(n['status']=='복습 필요' for n in d['notes'])
+    done=sum(n['status']=='이해 완료' for n in d['notes'])
+    st.write(f'복습 필요 {need}개 · 이해 완료 {done}개')
+    countdown(d)
 
 @st.fragment(run_every='1s')
-def timer_screen():
-    d=st.session_state.records
+def home_screen():
+    data=st.session_state.records
     at=now()
-    day=study_day(d)
-    running=next((s for s in d['segments'] if not s['end']),None)
-    total=totals(d,at).get(day,0)
-    elapsed=sum(sec for s in d['segments'] if s['cycle']==d['cycle'] for key,sec in portions(s,at) if d['mode']=='manual' or key==today().isoformat())
-    st.caption(datetime.fromisoformat(day).strftime('%m. %d')+' · '+('공부 중' if running else '일시정지'))
-    clock(elapsed if student else total, bool(running) if student else bool(running and study_day(d)==day))
-    st.caption(f'공부일 누적 {fmt(total)} · '+('자동 마감' if d['mode']=='auto' else '직접 마감'))
+    day=study_day(data,at)
+    running=next((s for s in data['segments'] if not s['end']),None)
+    elapsed=sum(sec for s in data['segments'] if s['cycle']==data['cycle'] for key,sec in portions(s,at) if key==day)
+    growth_summary(data)
+    st.caption(f'공부일 {day} · '+('공부 중' if running else '정지'))
+    clock(elapsed if student else totals(data,at).get(day,0),bool(running))
     if student:
-        a,b=st.columns(2)
-        if a.button('일시정지',disabled=not running,use_container_width=True):
-            stop_timer(d,now())
+        controls=st.columns(3 if data['cutoff'] else 2)
+        if controls[0].button('시작',type='primary',disabled=bool(running),use_container_width=True):
+            start_subject(data,st.session_state.get('home_subject',data['subjects'][0]),st.session_state.get('home_content','').strip(),now())
             rerun()
-        if d['mode']=='manual' and b.button('오늘 공부 끝',use_container_width=True,type='primary'):
-            finish_day(d,now())
+        if controls[1].button('일시정지',disabled=not running,use_container_width=True):
+            stop_timer(data,now())
             rerun()
-        content=st.text_input('학습 내용',placeholder='지금 공부할 내용을 적어 주세요',key='study_content',max_chars=500)
-    else:
-        content=''
-    for i,subject in enumerate(d['subjects']):
-        subject_seconds=sum(sec for s in d['segments'] if s['subject']==subject for key,sec in portions(s,at) if key==day)
-        cols=st.columns([.65,2.4,1.6])
-        active=bool(running and running['subject']==subject)
-        if student:
-            if cols[0].button('Ⅱ' if active else '▶',key='start_'+str(i),type='primary' if active else 'secondary',use_container_width=True):
-                if active:
-                    stop_timer(d,now())
-                else:
-                    start_subject(d,subject,content.strip(),now())
-                rerun()
-        else:
-            cols[0].write('•')
-        cols[1].markdown('<div class="subject-name">'+escape(subject)+'</div>',unsafe_allow_html=True)
-        cols[2].write(fmt(subject_seconds))
-    monday=today()-timedelta(days=today().weekday())
-    weekly=sum(totals(d,at).get((monday+timedelta(days=i)).isoformat(),0) for i in range(7))
-    st.caption('이번 주 '+fmt(weekly)+' · 이해 완료 '+str(sum(n['status']=='이해 완료' for n in d['notes']))+'개')
+        if data['cutoff'] and controls[2].button('오늘 공부 끝',use_container_width=True):
+            finish_day(data,now())
+            rerun()
+        a,b=st.columns([1,2])
+        a.selectbox('과목',data['subjects'],key='home_subject',disabled=bool(running),label_visibility='collapsed')
+        b.text_input('학습 내용',key='home_content',max_chars=500,placeholder='학습 내용',disabled=bool(running),label_visibility='collapsed')
+    cutoff=data['cutoff']
+    st.caption(f'매일 {cutoff//60:02}:{cutoff%60:02} 마감 · 공부일 누적 {fmt(totals(data,at).get(day,0))}')
+    if 'month' not in st.session_state:
+        st.session_state.month=today().replace(day=1)
+    month=st.session_state.month
+    left,middle,right=st.columns([1,4,1])
+    if left.button('‹',key='prev_month',use_container_width=True):
+        st.session_state.month=(month-timedelta(days=1)).replace(day=1)
+        rerun()
+    middle.subheader(f'{month.year}년 {month.month}월')
+    if right.button('›',key='next_month',use_container_width=True):
+        st.session_state.month=(month.replace(day=28)+timedelta(days=4)).replace(day=1)
+        rerun()
+    daily=totals(data,now())
+    selected=st.session_state.get('selected_day',today().isoformat())
+    with st.container(key='calgrid'):
+        for col,label in zip(st.columns(7),'월화수목금토일'):
+            col.caption(label)
+        for week in calendar.Calendar(0).monthdatescalendar(month.year,month.month):
+            for col,day in zip(st.columns(7),week):
+                seconds=daily.get(day.isoformat(),0)
+                text=str(day.day)
+                if seconds:
+                    text+=f'\n{int(seconds)//3600}h{int(seconds)%3600//60:02}'
+                if day.isoformat() in data['stamps']:
+                    text+='\n◎'
+                if col.button(text,key='day_'+day.isoformat(),disabled=day.month!=month.month,type='primary' if day.isoformat()==selected else 'secondary',use_container_width=True):
+                    st.session_state.selected_day=day.isoformat()
+                    rerun()
+    st.markdown('<div class="rule"></div>',unsafe_allow_html=True)
+    day_details(data,date.fromisoformat(st.session_state.get('selected_day',today().isoformat())))
+    if not student:
+        selected=date.fromisoformat(st.session_state.get('selected_day',today().isoformat()))
+        if st.button('이 공부일 확인 도장',disabled=selected>today() or selected.isoformat() in data['stamps'],use_container_width=True,type='primary'):
+            add_stamp(data,selected,now())
+            rerun()
 
 with st.container(key='workspace'):
     screen=st.session_state.screen
-    if screen=='timer':
-        timer_screen()
-
-    elif screen=='calendar':
-        if 'month' not in st.session_state:
-            st.session_state.month=today().replace(day=1)
-        month=st.session_state.month
-        left,middle,right=st.columns([1,4,1])
-        if left.button('‹',key='prev_month',use_container_width=True):
-            st.session_state.month=(month-timedelta(days=1)).replace(day=1)
-            rerun()
-        middle.subheader(f'{month.year}년 {month.month}월')
-        if right.button('›',key='next_month',use_container_width=True):
-            st.session_state.month=(month.replace(day=28)+timedelta(days=4)).replace(day=1)
-            rerun()
-        daily=totals(data,now())
-        selected=st.session_state.get('selected_day',today().isoformat())
-        with st.container(key='calgrid'):
-            for col,label in zip(st.columns(7),'월화수목금토일'):
-                col.caption(label)
-            for week in calendar.Calendar(0).monthdatescalendar(month.year,month.month):
-                for col,day in zip(st.columns(7),week):
-                    seconds=daily.get(day.isoformat(),0)
-                    text=str(day.day)
-                    if seconds:
-                        text+=f'\n{int(seconds)//3600}h{int(seconds)%3600//60:02}'
-                    if day.isoformat() in data['stamps']:
-                        text+='\n◎'
-                    if col.button(text,key='day_'+day.isoformat(),disabled=day.month!=month.month,type='primary' if day.isoformat()==selected else 'secondary',use_container_width=True):
-                        st.session_state.selected_day=day.isoformat()
-                        rerun()
-        st.markdown('<div class="rule"></div>',unsafe_allow_html=True)
-        day_details(data,date.fromisoformat(st.session_state.get('selected_day',today().isoformat())))
+    if screen=='home':
+        home_screen()
 
     elif screen=='notes':
         st.subheader('오답노트')
@@ -421,17 +434,16 @@ with st.container(key='workspace'):
                         data['subjects'].append(new_subject.strip())
                         rerun()
             with st.form('day_mode'):
-                mode=st.selectbox('공부 시간 마감',['자동 마감','직접 마감'],index=0 if data['mode']=='auto' else 1)
-                st.caption('자동: 자정 기준으로 날짜별 분할 · 직접: 오늘 공부 끝을 누를 때 마감')
-                if st.form_submit_button('마감 방식 저장',use_container_width=True):
-                    new='auto' if mode=='자동 마감' else 'manual'
-                    if new!=data['mode']:
-                        if any(not s['end'] for s in data['segments']):
-                            st.error('실행 중인 공부를 먼저 일시정지해 주세요.')
-                        elif data['mode']=='manual' and data['active_day']:
-                            st.error('오늘 공부 끝을 누른 후 변경해 주세요.')
+                minutes=int(data.get('cutoff',0))
+                cutoff_time=st.time_input('하루 공부 마감 기준 시각 (한국 시간)',value=datetime.min.time().replace(hour=minutes//60,minute=minutes%60),step=timedelta(minutes=1))
+                st.caption('기본 00:00. 02:00으로 바꾸면 00:00~01:59 공부는 전날에 합산하고 02:00부터 새 공부일로 계산합니다. 기준 시각을 바꾸면 오늘 공부 끝 버튼도 표시됩니다. 이미 기록된 시간은 기존 기준을 유지합니다.')
+                if st.form_submit_button('기준 시각 저장',use_container_width=True):
+                    new_cutoff=cutoff_time.hour*60+cutoff_time.minute
+                    if new_cutoff!=data['cutoff']:
+                        if any(not seg['end'] for seg in data['segments']):
+                            st.error('기준 시각을 바꾸기 전에 공부를 일시정지해 주세요.')
                         else:
-                            data.update(mode=new,active_day=None,cycle=uid())
+                            data.update(cutoff=new_cutoff,mode='auto',active_day=None,cycle=uid())
                             rerun()
             st.markdown('**시험 일정**')
             countdown(data)
