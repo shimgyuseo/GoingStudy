@@ -551,7 +551,7 @@ with st.container(key='workspace'):
                     except ValueError:
                         st.error('목표 등급은 1~5 사이 숫자로 입력해 주세요. 예: 1.5')
             with st.form('grade',clear_on_submit=True):
-                grade=st.text_input('등급',placeholder='예: 1.8')
+                grade=st.text_input('현재 등급',placeholder='예: 1.8')
                 if st.form_submit_button('성적 추가',use_container_width=True):
                     try:
                         value=float(grade.strip())
