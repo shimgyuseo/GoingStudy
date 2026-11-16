@@ -147,13 +147,13 @@ button[kind="primary"]{background:var(--accent)!important;border-color:var(--acc
 button:disabled{opacity:.45}
 input,textarea,[data-baseweb="input"],[data-baseweb="base-input"],[data-baseweb="select"]>div,[role="option"],[role="listbox"],[data-baseweb="popover"]{background:var(--soft)!important;color:var(--fg)!important;-webkit-text-fill-color:var(--fg)!important}
 
-[class*="st-key-editor_"]{display:block!important;min-height:175px!important;flex:0 0 auto!important;overflow:visible!important;padding:12px!important}
-[class*="st-key-editor_"] textarea{min-height:110px!important}
+[class*="st-key-editor_"]{display:block!important;min-height:108px!important;flex:0 0 auto!important;overflow:visible!important;padding:12px!important}
+[class*="st-key-editor_"] textarea{min-height:68px!important}
 /* Keep every editor visible inside the fixed-height mobile workspace. */
 .st-key-workspace > div,.st-key-workspace [data-testid="stVerticalBlock"]{min-height:min-content!important}
 .st-key-workspace [data-testid="stVerticalBlock"] > div{flex-shrink:0!important}
-.st-key-workspace [data-testid="stTextArea"]{display:block!important;visibility:visible!important;min-height:132px!important;height:auto!important;overflow:visible!important;flex-shrink:0!important}
-.st-key-workspace [data-testid="stTextArea"] textarea{display:block!important;visibility:visible!important;min-height:100px!important;height:100px!important;opacity:1!important;border:1px solid var(--line)!important;border-radius:10px!important;resize:vertical!important}
+.st-key-workspace [data-testid="stTextArea"]{display:block!important;visibility:visible!important;min-height:78px!important;height:auto!important;overflow:visible!important;flex-shrink:0!important}
+.st-key-workspace [data-testid="stTextArea"] textarea{display:block!important;visibility:visible!important;min-height:68px!important;height:68px!important;opacity:1!important;border:1px solid var(--line)!important;border-radius:10px!important;resize:vertical!important}
 
 input::placeholder,textarea::placeholder{color:var(--fg)!important;opacity:.5}
 [data-testid="stForm"],[data-testid="stVerticalBlockBorderWrapper"]{border-color:var(--line)!important}
@@ -266,7 +266,7 @@ render();setInterval(render,200);
     components.html(html,height=70,scrolling=False)
 
 def growth_summary(d):
-    st.caption('인서울을 위한 학습 성장 기록' if student else '자녀의 학습 과정과 성장 확인')
+    st.markdown('<div style="background:#ff9838;color:#111;padding:12px 14px;border-radius:10px;font-weight:700;margin-bottom:8px">'+('인서울을 위한 학습 성장 기록' if student else '자녀의 학습 과정과 성장 확인')+'</div>',unsafe_allow_html=True)
     latest=sorted(d['grades'],key=lambda g:g['day'])
     if latest:
         value=latest[-1]['value']
@@ -415,26 +415,26 @@ with st.container(key='workspace'):
             title=st.text_input('문제번호',max_chars=150,key='note_number')
             with st.container(border=True,key='editor_text_problem'):
                 st.markdown('**문제 내용·메모**')
-                problem=st.text_area('문제 내용·메모',key='text_problem',height=100,max_chars=8000,label_visibility='collapsed')
+                problem=st.text_area('문제 내용·메모',key='text_problem',height=68,max_chars=8000,label_visibility='collapsed')
             with st.container(border=True,key='editor_text_interpretation'):
                 st.markdown('**틀린 관점·해석의 오류**')
-                interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=100,max_chars=8000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?',label_visibility='collapsed')
+                interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=68,max_chars=8000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?',label_visibility='collapsed')
             with st.container(border=True,key='editor_text_preparation'):
                 st.markdown('**학습·시험 준비에서 부족했던 점**')
-                preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=100,max_chars=8000,label_visibility='collapsed')
+                preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=68,max_chars=8000,label_visibility='collapsed')
             with st.container(border=True,key='editor_note_concept'):
                 st.markdown('**부족했던 개념**')
-                concept=st.text_area('부족했던 개념',height=100,max_chars=8000,key='note_concept',label_visibility='collapsed')
+                concept=st.text_area('부족했던 개념',height=68,max_chars=8000,key='note_concept',label_visibility='collapsed')
             with st.container(border=True,key='editor_text_shortage'):
                 st.markdown('**부족했던 점**')
-                shortage=st.text_area('부족했던 점',key='text_shortage',height=100,max_chars=8000,label_visibility='collapsed')
+                shortage=st.text_area('부족했던 점',key='text_shortage',height=68,max_chars=8000,label_visibility='collapsed')
             cause=st.multiselect('틀린 원인',CAUSES,key='note_causes')
             with st.container(border=True,key='editor_note_other'):
                 st.markdown('**원인 추가 설명**')
-                extra=st.text_area('원인 추가 설명',height=100,max_chars=8000,key='note_other',placeholder='기타를 선택했다면 구체적인 원인을 꼭 적어 주세요. 다른 원인도 자세히 설명할 수 있습니다.',label_visibility='collapsed')
+                extra=st.text_area('원인 추가 설명',height=68,max_chars=8000,key='note_other',placeholder='기타를 선택했다면 구체적인 원인을 꼭 적어 주세요. 다른 원인도 자세히 설명할 수 있습니다.',label_visibility='collapsed')
             with st.container(border=True,key='editor_text_answer'):
                 st.markdown('**정답 및 풀이·다음 대비 방법**')
-                answer=st.text_area('정답 및 풀이·다음 대비 방법',key='text_answer',height=100,max_chars=8000,label_visibility='collapsed')
+                answer=st.text_area('정답 및 풀이·다음 대비 방법',key='text_answer',height=68,max_chars=8000,label_visibility='collapsed')
             record_date=st.date_input('기록 날짜',value=today(),key='note_record_date')
             if st.button('오답 저장',type='primary',use_container_width=True):
                 photo=st.session_state.get('note_photo')
@@ -479,17 +479,17 @@ with st.container(key='workspace'):
     elif screen=='stamps':
         st.subheader('이번 주 확인 도장')
         monday=today()-timedelta(days=today().weekday())
-        days=[monday+timedelta(days=i) for i in range(5)]
+        days=[monday+timedelta(days=i) for i in range(7)]
         count=sum(day.isoformat() in data['stamps'] for day in days)
-        st.write(f'월요일부터 금요일까지 · {count}/5')
+        st.write(f'월요일부터 일요일까지 · {count}/7')
         with st.container(key='stampgrid'):
-            for col,day,label in zip(st.columns(5),days,'월화수목금'):
+            for col,day,label in zip(st.columns(7),days,'월화수목금토일'):
                 stamped=day.isoformat() in data['stamps']
                 if col.button(('◎ 완료' if stamped else '도장 찍기' if not student else '도장 자리')+'\n'+label+' '+str(day.day),key='stamp_slot_'+str(day),use_container_width=True,type='primary' if stamped else 'secondary',disabled=student or stamped or day>today()):
                     add_stamp(data,day,now())
                     st.session_state.stamp_day=day
                     rerun()
-        if count==5:
+        if count==7:
             st.write('이번 주 용돈 조건 달성!')
         selected=st.date_input('확인할 공부일',value=today(),max_value=today(),key='stamp_day_picker')
         day_details(data,selected)
@@ -499,6 +499,8 @@ with st.container(key='workspace'):
                 rerun()
         else:
             st.caption('부모님이 확인하면 도장이 표시됩니다.')
+
+        st.markdown('<div style="border:1px solid #ff9838;border-radius:10px;padding:12px;text-align:center;font-weight:700">도장 모아서 용돈 받기!!!</div>',unsafe_allow_html=True)
 
     elif screen=='settings':
         st.subheader('설정')
