@@ -114,38 +114,6 @@ def undo_finish(data, at):
         data['cycle'] = saved['cycle']
     # Keep the timer paused: time since finishing must not count as study.
 
-def note_input(label, key, height=100):
-    mode=st.segmented_control(label+' 입력 방식',['타이핑','필기'],default='타이핑',key='mode_'+key)
-    if mode!='필기':
-        return st.text_area(label,key='text_'+key,height=height,max_chars=8000),None
-    st.write(label)
-    # Compatibility bridge for the canvas component on current Streamlit.
-    import streamlit.elements.image as image_module
-    if not hasattr(image_module,'image_to_url'):
-        from streamlit.elements.lib.image_utils import image_to_url as native_image_to_url
-        from streamlit.elements.lib.layout_utils import LayoutConfig
-        def legacy_image_to_url(image,width,clamp,channels,output_format,image_id):
-            return native_image_to_url(image,LayoutConfig(width=width),clamp,channels,output_format,image_id)
-        image_module.image_to_url=legacy_image_to_url
-    from streamlit_drawable_canvas import st_canvas
-    import json
-    import numpy as np
-    from PIL import Image
-    result=st_canvas(fill_color='rgba(0,0,0,0)',stroke_width=3,stroke_color='#000000',
-        background_color='#ffffff',height=230,width=290,drawing_mode='freedraw',
-        update_streamlit=True,display_toolbar=True,key='canvas_'+key,
-        initial_drawing=st.session_state.get('drawing_'+key))
-    if result.json_data and result.json_data.get('objects'):
-        st.session_state['drawing_'+key]=result.json_data
-        if result.image_data is not None:
-            buf=io.BytesIO()
-            Image.fromarray(np.asarray(result.image_data,dtype=np.uint8)).save(buf,format='PNG')
-            st.session_state['ink_'+key]=buf.getvalue()
-    elif result.json_data is not None:
-        st.session_state.pop('ink_'+key,None)
-        st.session_state.pop('drawing_'+key,None)
-    return '',st.session_state.get('ink_'+key)
-
 def add_stamp(data, day, at):
     key = day.isoformat()
     if day <= at.astimezone(KST).date() and key not in data['stamps']:
@@ -260,12 +228,16 @@ def day_details(data, day):
         st.caption('부모님 확인 완료 · '+datetime.fromisoformat(data['stamps'][key]).astimezone(KST).strftime('%H:%M'))
 
 def countdown(data):
-    future=sorted([e for e in data['exams'] if e['day']>=today().isoformat()],key=lambda x:x['day'])
-    for exam in future:
-        left=(date.fromisoformat(exam['day'])-today()).days
-        count='D-DAY' if left==0 else f'D-{left}'
-        st.write(f'{count} · {exam["subject"]} {exam["name"]}'+(' · 오답 집중 복습' if left<=3 else ''))
-    return {e['subject'] for e in future if 0<=(date.fromisoformat(e['day'])-today()).days<=3}
+    exam_day=data.get('exam_day')
+    if not exam_day:
+        return set()
+    left=(date.fromisoformat(exam_day)-today()).days
+    label='D-DAY' if left==0 else f'D-{left}' if left>0 else f'D+{-left}'
+    st.write(f'시험 {label} · {exam_day}')
+    if 0<=left<=3:
+        st.write('시험이 얼마 남지 않았어요. 틀렸던 오답노트를 집중 복습해 주세요!')
+        return set(data['subjects'])
+    return set()
 
 # Browser timer updates every second. Python stores timestamps on every start/stop.
 # The component only displays elapsed time; it is not the source of saved durations.
@@ -285,7 +257,7 @@ render();setInterval(render,200);
     components.html(html,height=70,scrolling=False)
 
 def growth_summary(d):
-    st.caption('서울 소재 대학 진학을 위한 학습 성장 기록' if student else '자녀의 학습 과정과 성장 확인')
+    st.caption('인서울을 위한 학습 성장 기록' if student else '자녀의 학습 과정과 성장 확인')
     latest=sorted(d['grades'],key=lambda g:g['day'])
     if latest:
         value=latest[-1]['value']
@@ -311,6 +283,12 @@ def home_screen():
     running=next((s for s in data['segments'] if not s['end']),None)
     elapsed=sum(sec for s in data['segments'] if s['cycle']==data['cycle'] for key,sec in portions(s,at) if key==day)
     growth_summary(data)
+    if student:
+        with st.form('home_exam_date'):
+            exam_day=st.date_input('시험 날짜',value=date.fromisoformat(data['exam_day']) if data.get('exam_day') else None)
+            if st.form_submit_button('시험 날짜 저장',use_container_width=True):
+                data['exam_day']=exam_day.isoformat() if exam_day else None
+                rerun()
     st.caption(f'공부일 {day} · '+('공부 중' if running else '정지'))
     clock(elapsed if student else totals(data,at).get(day,0),bool(running))
     if student:
@@ -356,7 +334,7 @@ def home_screen():
                 seconds=daily.get(day.isoformat(),0)
                 text=str(day.day)
                 if seconds:
-                    text+=f'\n{int(seconds)//3600}h{int(seconds)%3600//60:02}'
+                    text+='\n'+fmt(seconds)
                 if day.isoformat() in data['stamps']:
                     text+='\n◎'
                 if col.button(text,key='day_'+day.isoformat(),disabled=day.month!=month.month,type='primary' if day.isoformat()==selected else 'secondary',use_container_width=True):
@@ -411,27 +389,26 @@ with st.container(key='workspace'):
             subj=st.selectbox('과목',data['subjects'],key='note_subject')
             source=st.selectbox('문제 구분',['학교 시험','기출·시험 대비 문제'],key='note_source')
             title=st.text_input('문제번호',max_chars=150,key='note_number')
-            problem,problem_ink=note_input('문제 내용·메모','problem')
-            interpretation,interpretation_ink=note_input('틀린 관점·해석의 오류','interpretation')
-            preparation,preparation_ink=note_input('학습·시험 준비에서 부족했던 점','preparation')
+            problem=st.text_area('문제 내용·메모',key='text_problem',height=100,max_chars=8000)
+            interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=100,max_chars=8000)
+            preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=100,max_chars=8000)
             concept=st.text_area('부족했던 개념',height=80,max_chars=4000,key='note_concept')
             cause=st.multiselect('틀린 원인',CAUSES,key='note_causes')
             extra=st.text_input('기타 원인을 직접 작성해 주세요',max_chars=2000,key='note_other') if '기타' in cause else ''
-            answer,answer_ink=note_input('정답 및 풀이·다음 대비 방법','answer')
+            answer=st.text_area('정답 및 풀이·다음 대비 방법',key='text_answer',height=100,max_chars=8000)
             record_date=st.date_input('기록 날짜',value=today(),key='note_record_date')
             if st.button('오답 저장',type='primary',use_container_width=True):
                 photo=st.session_state.get('note_photo')
-                drawings={k:v for k,v in [('problem',problem_ink),('interpretation',interpretation_ink),('preparation',preparation_ink),('answer',answer_ink)] if v}
-                if not title.strip() or not (interpretation.strip() or interpretation_ink) or not (preparation.strip() or preparation_ink) or not (answer.strip() or answer_ink) or not cause:
-                    st.error('문제번호·관점 오류·준비 부족·풀이와 틀린 원인을 작성해 주세요. 타이핑 또는 필기로 작성할 수 있습니다.')
+                if not title.strip() or not interpretation.strip() or not preparation.strip() or not answer.strip() or not cause:
+                    st.error('문제번호·관점 오류·준비 부족·풀이와 틀린 원인을 작성해 주세요. ')
                 elif '기타' in cause and not extra.strip():
                     st.error('기타 원인을 직접 작성해 주세요.')
-                elif not problem.strip() and not problem_ink and photo is None:
-                    st.error('문제 사진이나 문제 내용·필기를 넣어 주세요.')
+                elif not problem.strip() and photo is None:
+                    st.error('문제 사진이나 문제 내용를 넣어 주세요.')
                 else:
                     data['notes'].append(dict(id=uid(),subject=subj,source=source,title=title.strip(),problem=problem.strip(),
                         interpretation=interpretation.strip(),preparation=preparation.strip(),concept=concept.strip(),causes=cause,
-                        extra=extra.strip(),answer=answer.strip(),status='복습 필요',day=record_date.isoformat(),photo=photo,drawings=drawings))
+                        extra=extra.strip(),answer=answer.strip(),status='복습 필요',day=record_date.isoformat(),photo=photo))
                     st.session_state.pop('note_photo',None)
                     st.success('오답을 저장했습니다.')
         st.markdown('**복습 목록**')
@@ -452,9 +429,6 @@ with st.container(key='workspace'):
                 for label,key in [('문제 내용','problem'),('틀린 관점·해석의 오류','interpretation'),('학습·시험 대비 부족','preparation'),('부족했던 개념','concept'),('원인 추가 설명','extra'),('정답 및 풀이','answer')]:
                     if note[key]:
                         st.write(label+'\n\n'+note[key])
-                for field,picture in note.get('drawings',{}).items():
-                    st.caption({'problem':'문제 내용·메모','interpretation':'틀린 관점·해석의 오류','preparation':'학습·시험 준비에서 부족했던 점','answer':'정답 및 풀이·다음 대비 방법'}[field]+' · 필기')
-                    st.image(picture,use_container_width=True)
                 st.caption('틀린 원인: '+', '.join(note['causes']))
                 if student:
                     status=st.selectbox('복습 상태',['복습 필요','이해 완료','이미 아는 유형'],index=['복습 필요','이해 완료','이미 아는 유형'].index(note['status']),key='status_'+note['id'])
@@ -516,20 +490,6 @@ with st.container(key='workspace'):
                         else:
                             data.update(cutoff=new_cutoff,mode='auto',active_day=None,cycle=uid())
                             rerun()
-            st.markdown('**시험 일정**')
-            countdown(data)
-            with st.form('add_exam',clear_on_submit=True):
-                subject=st.selectbox('시험 과목',data['subjects'])
-                name=st.text_input('시험명',max_chars=100)
-                day=st.date_input('시험 날짜')
-                if st.form_submit_button('시험 등록',use_container_width=True):
-                    if name.strip():
-                        data['exams'].append(dict(id=uid(),subject=subject,name=name.strip(),day=day.isoformat()))
-                        rerun()
-            for exam in data['exams']:
-                if st.button(exam['day']+' '+exam['subject']+' '+exam['name']+' · 삭제',key='delete_'+exam['id'],use_container_width=True):
-                    data['exams']=[e for e in data['exams'] if e['id']!=exam['id']]
-                    rerun()
             with st.form('goal'):
                 target=st.number_input('목표 등급',min_value=1.,max_value=9.,value=float(data['target'] or 1.5),step=.1)
                 if st.form_submit_button('목표 저장',use_container_width=True):
