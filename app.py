@@ -114,6 +114,38 @@ def undo_finish(data, at):
         data['cycle'] = saved['cycle']
     # Keep the timer paused: time since finishing must not count as study.
 
+def note_input(label, key, height=100):
+    mode=st.segmented_control(label+' 입력 방식',['타이핑','필기'],default='타이핑',key='mode_'+key)
+    if mode!='필기':
+        return st.text_area(label,key='text_'+key,height=height,max_chars=8000),None
+    st.write(label)
+    # Compatibility bridge for the canvas component on current Streamlit.
+    import streamlit.elements.image as image_module
+    if not hasattr(image_module,'image_to_url'):
+        from streamlit.elements.lib.image_utils import image_to_url as native_image_to_url
+        from streamlit.elements.lib.layout_utils import LayoutConfig
+        def legacy_image_to_url(image,width,clamp,channels,output_format,image_id):
+            return native_image_to_url(image,LayoutConfig(width=width),clamp,channels,output_format,image_id)
+        image_module.image_to_url=legacy_image_to_url
+    from streamlit_drawable_canvas import st_canvas
+    import json
+    import numpy as np
+    from PIL import Image
+    result=st_canvas(fill_color='rgba(0,0,0,0)',stroke_width=3,stroke_color='#000000',
+        background_color='#ffffff',height=230,width=290,drawing_mode='freedraw',
+        update_streamlit=True,display_toolbar=True,key='canvas_'+key,
+        initial_drawing=st.session_state.get('drawing_'+key))
+    if result.json_data and result.json_data.get('objects'):
+        st.session_state['drawing_'+key]=result.json_data
+        if result.image_data is not None:
+            buf=io.BytesIO()
+            Image.fromarray(np.asarray(result.image_data,dtype=np.uint8)).save(buf,format='PNG')
+            st.session_state['ink_'+key]=buf.getvalue()
+    elif result.json_data is not None:
+        st.session_state.pop('ink_'+key,None)
+        st.session_state.pop('drawing_'+key,None)
+    return '',st.session_state.get('ink_'+key)
+
 def add_stamp(data, day, at):
     key = day.isoformat()
     if day <= at.astimezone(KST).date() and key not in data['stamps']:
@@ -376,35 +408,32 @@ with st.container(key='workspace'):
                 if st.button('사진 삭제',key='remove_note_photo'):
                     st.session_state.pop('note_photo',None)
                     rerun()
-            with st.form('new_note',clear_on_submit=True):
-                subj=st.selectbox('과목',data['subjects'])
-                source=st.selectbox('문제 구분',['학교 시험','기출·시험 대비 문제'])
-                title=st.text_input('문제명',max_chars=150)
-                problem=st.text_area('문제 내용·메모',height=80,max_chars=8000)
-                interpretation=st.text_area('틀린 관점·해석의 오류',height=90,max_chars=4000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?')
-                preparation=st.text_area('학습·시험 준비에서 부족했던 점',height=90,max_chars=4000)
-                concept=st.text_area('부족했던 개념',height=80,max_chars=4000)
-                cause=st.multiselect('틀린 원인',CAUSES)
-                extra=st.text_input('원인 추가 설명',max_chars=2000)
-                answer=st.text_area('정답 및 풀이·다음 대비 방법',height=100,max_chars=8000)
-                exam_date=st.date_input('이 과목 시험 날짜',value=None)
-                if st.form_submit_button('오답 저장',type='primary',use_container_width=True):
-                    photo=st.session_state.get('note_photo')
-                    if not title.strip() or not interpretation.strip() or not preparation.strip() or not answer.strip() or not cause:
-                        st.error('문제명·관점 오류·준비 부족·풀이와 틀린 원인을 작성해 주세요. 해당 없으면 “해당 없음”으로 적어 주세요.')
-                    elif not problem.strip() and photo is None:
-                        st.error('문제 사진을 넣거나 문제 내용을 작성해 주세요.')
-                    elif photo is not None and len(photo)>10*1024*1024:
-                        st.error('사진은 10MB 이하로 올려 주세요.')
-                    else:
-                        data['notes'].append(dict(id=uid(),subject=subj,source=source,title=title.strip(),problem=problem.strip(),
-                            interpretation=interpretation.strip(),preparation=preparation.strip(),concept=concept.strip(),causes=cause,
-                            extra=extra.strip(),answer=answer.strip(),status='복습 필요',day=study_day(data),
-                            photo=photo))
-                        if exam_date is not None and not any(e['subject']==subj and e['day']==exam_date.isoformat() for e in data['exams']):
-                            data['exams'].append(dict(id=uid(),subject=subj,name='시험',day=exam_date.isoformat()))
-                        st.session_state.pop('note_photo',None)
-                        rerun()
+            subj=st.selectbox('과목',data['subjects'],key='note_subject')
+            source=st.selectbox('문제 구분',['학교 시험','기출·시험 대비 문제'],key='note_source')
+            title=st.text_input('문제번호',max_chars=150,key='note_number')
+            problem,problem_ink=note_input('문제 내용·메모','problem')
+            interpretation,interpretation_ink=note_input('틀린 관점·해석의 오류','interpretation')
+            preparation,preparation_ink=note_input('학습·시험 준비에서 부족했던 점','preparation')
+            concept=st.text_area('부족했던 개념',height=80,max_chars=4000,key='note_concept')
+            cause=st.multiselect('틀린 원인',CAUSES,key='note_causes')
+            extra=st.text_input('기타 원인을 직접 작성해 주세요',max_chars=2000,key='note_other') if '기타' in cause else ''
+            answer,answer_ink=note_input('정답 및 풀이·다음 대비 방법','answer')
+            record_date=st.date_input('기록 날짜',value=today(),key='note_record_date')
+            if st.button('오답 저장',type='primary',use_container_width=True):
+                photo=st.session_state.get('note_photo')
+                drawings={k:v for k,v in [('problem',problem_ink),('interpretation',interpretation_ink),('preparation',preparation_ink),('answer',answer_ink)] if v}
+                if not title.strip() or not (interpretation.strip() or interpretation_ink) or not (preparation.strip() or preparation_ink) or not (answer.strip() or answer_ink) or not cause:
+                    st.error('문제번호·관점 오류·준비 부족·풀이와 틀린 원인을 작성해 주세요. 타이핑 또는 필기로 작성할 수 있습니다.')
+                elif '기타' in cause and not extra.strip():
+                    st.error('기타 원인을 직접 작성해 주세요.')
+                elif not problem.strip() and not problem_ink and photo is None:
+                    st.error('문제 사진이나 문제 내용·필기를 넣어 주세요.')
+                else:
+                    data['notes'].append(dict(id=uid(),subject=subj,source=source,title=title.strip(),problem=problem.strip(),
+                        interpretation=interpretation.strip(),preparation=preparation.strip(),concept=concept.strip(),causes=cause,
+                        extra=extra.strip(),answer=answer.strip(),status='복습 필요',day=record_date.isoformat(),photo=photo,drawings=drawings))
+                    st.session_state.pop('note_photo',None)
+                    st.success('오답을 저장했습니다.')
         st.markdown('**복습 목록**')
         filter_name=st.selectbox('표시할 오답',['복습 필요','시험 직전 복습','전체 기록'],key='note_filter')
         notes=[n for n in data['notes'] if filter_name=='전체 기록' or n['status']=='복습 필요']
@@ -423,6 +452,9 @@ with st.container(key='workspace'):
                 for label,key in [('문제 내용','problem'),('틀린 관점·해석의 오류','interpretation'),('학습·시험 대비 부족','preparation'),('부족했던 개념','concept'),('원인 추가 설명','extra'),('정답 및 풀이','answer')]:
                     if note[key]:
                         st.write(label+'\n\n'+note[key])
+                for field,picture in note.get('drawings',{}).items():
+                    st.caption({'problem':'문제 내용·메모','interpretation':'틀린 관점·해석의 오류','preparation':'학습·시험 준비에서 부족했던 점','answer':'정답 및 풀이·다음 대비 방법'}[field]+' · 필기')
+                    st.image(picture,use_container_width=True)
                 st.caption('틀린 원인: '+', '.join(note['causes']))
                 if student:
                     status=st.selectbox('복습 상태',['복습 필요','이해 완료','이미 아는 유형'],index=['복습 필요','이해 완료','이미 아는 유형'].index(note['status']),key='status_'+note['id'])
