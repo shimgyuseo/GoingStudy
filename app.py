@@ -20,13 +20,30 @@ SUBJECTS = ['국어', '수학', '영어', '한국사', '사회', '과학', '기�
 REASONS = ['개념 부족', '관점·해석 오류', '계산 실수', '암기 부족', '시간 부족', '기타']
 st.set_page_config(page_title='나의 공부 성장 기록장', page_icon='🌱', layout='centered')
 st.markdown('''<style>
-.block-container{max-width:760px;padding-top:1.1rem;padding-bottom:2rem}
-.stApp{background:#f5faf8;color:#183e35}
+
+:root{color-scheme:light}
+.stApp,[data-testid="stAppViewContainer"]{background:#eef3f8!important;color:#172b3a!important}
+.block-container{max-width:760px;padding-top:3rem;padding-bottom:2rem}
+[data-testid="stHeader"]{background:#eef3f8!important}
+[data-testid="stSidebar"]{background:#e3ecf3!important}
+h1,h2,h3,label,[data-testid="stMarkdownContainer"],[data-testid="stWidgetLabel"],[data-testid="stMetricLabel"],[data-testid="stMetricValue"],.stText{color:#172b3a!important}
 h1{font-size:1.5rem!important} h2{font-size:1.15rem!important}
-button{min-height:44px!important} [data-testid="stMetricValue"]{font-size:1.35rem}
+[data-testid="stCaptionContainer"]{color:#486174!important}
+[data-testid="stExpander"],[data-testid="stForm"]{background:#fff!important;border:1px solid #c5d2df!important;border-radius:14px}
+button{min-height:46px!important}
+div.stButton>button,div.stFormSubmitButton>button,div.stDownloadButton>button{background:#fff!important;color:#173d39!important;border:1px solid #a9c5be!important;border-radius:10px!important}
+button p,button span{color:inherit!important}
+div.stButton>button:hover,div.stFormSubmitButton>button:hover{background:#e1f2ec!important;border-color:#24755f!important}
+div.stButton>button[kind="primary"],div.stFormSubmitButton>button[kind="primary"]{background:#17634f!important;color:#fff!important;border-color:#17634f!important}
+button:disabled{opacity:.5!important}
+input,textarea,[data-baseweb="input"],[data-baseweb="base-input"],[data-baseweb="select"]>div{background:#fff!important;color:#172b3a!important;-webkit-text-fill-color:#172b3a!important}
+input::placeholder,textarea::placeholder{color:#65798a!important;-webkit-text-fill-color:#65798a!important}
+[role="listbox"],[role="option"],[data-baseweb="popover"]{background:#fff!important;color:#172b3a!important}
+[data-testid="stMetricValue"]{font-size:1.35rem}
 [data-testid="stMetricLabel"]{font-size:.85rem}
-div.stButton>button[kind="primary"]{background:#207862;border-color:#207862}
-[data-testid="stExpander"]{background:white;border-radius:12px}
+.st-key-role_student button,.st-key-role_parent button{width:100%!important;aspect-ratio:1/1;min-height:0!important;font-size:1.2rem!important;border:2px solid #a9c5be!important}
+.st-key-role_student button p,.st-key-role_parent button p{font-size:1.2rem!important;font-weight:700}
+.st-key-role_student,.st-key-role_parent{max-width:220px;margin:auto}
 </style>''', unsafe_allow_html=True)
 
 def now():
@@ -118,30 +135,35 @@ def save(fn, role='student'):
         st.error(str(e))
 
 st.title('🌱 나의 공부 성장 기록장')
-st.caption('수행평가용 데모 · [가상 예시]는 실제 공부 기록이 아닙니다.')
-with st.expander('프로그램 목표·시연 범위'):
-    st.write('가족의 기대에 부응하고자 성적을 향상하고, 공부하는 노력의 과정을 부모님과 공유합니다. 서울 소재 대학 진학을 목표로 오답 분석과 학습 습관을 개선합니다.')
-    st.caption('특정 등급으로 대학 합격을 보장하지 않습니다. 이 시연 버전은 실제 다중 기기 공유·영구 저장·부모님 신원 인증을 제공하지 않습니다.')
-st.info('기록은 현재 접속 세션에서만 유지됩니다. 새로고침·연결 종료 시 초기화될 수 있고, 다른 기기와는 공유되지 않습니다.')
+st.write('가족의 기대에 부응하고자 성적을 향상하고, 공부하는 노력의 과정을 부모님과 공유합니다. 서울 소재 대학 진학을 목표로 오답 분석과 학습 습관을 개선합니다.')
 if 'role' not in st.session_state:
-    with st.form('login'):
-        role_label=st.radio('접속 역할',['학생','부모님'],horizontal=True)
-        pin=st.text_input('부모님 시연용 PIN (학생은 비워 두세요)',type='password',max_chars=128)
-        if not option('PARENT_DEMO_PIN'):
-            st.caption('공개 시연용 부모님 PIN: 2468 · 실제 보안 인증이 아닙니다.')
-        submit=st.form_submit_button('시연 시작',use_container_width=True)
-    if submit:
-        if role_label=='학생':
+    st.subheader('누가 접속하나요?')
+    left,right=st.columns(2)
+    with left:
+        if st.button('🎒 학생',key='role_student',use_container_width=True):
             st.session_state.role='student'
+            st.session_state.pop('parent_login',None)
             st.rerun()
-        elif time.time()<st.session_state.get('login_after',0):
-            st.warning('잠시 후 다시 시도해 주세요.')
-        elif hmac.compare_digest(pin,str(option('PARENT_DEMO_PIN','2468'))):
-            st.session_state.role='parent'
-            st.rerun()
-        else:
-            st.session_state.login_after=time.time()+3
-            st.error('PIN이 맞지 않습니다.')
+    with right:
+        if st.button('🌷 부모님',key='role_parent',use_container_width=True):
+            st.session_state.parent_login=True
+    if st.session_state.get('parent_login'):
+        with st.form('parent_login_form'):
+            st.markdown('**부모님 확인**')
+            pin=st.text_input('부모님 시연용 PIN',type='password',max_chars=128)
+            if not option('PARENT_DEMO_PIN'):
+                st.caption('시연용 PIN: 2468 · 실제 보안 인증이 아닙니다.')
+            submit=st.form_submit_button('부모님으로 시작',use_container_width=True,type='primary')
+        if submit:
+            if time.time()<st.session_state.get('login_after',0):
+                st.warning('잠시 후 다시 시도해 주세요.')
+            elif hmac.compare_digest(pin,str(option('PARENT_DEMO_PIN','2468'))):
+                st.session_state.role='parent'
+                st.session_state.pop('parent_login',None)
+                st.rerun()
+            else:
+                st.session_state.login_after=time.time()+3
+                st.error('PIN이 맞지 않습니다.')
     st.stop()
 student = st.session_state.role == 'student'
 with st.sidebar:
