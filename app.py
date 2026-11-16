@@ -283,12 +283,6 @@ def home_screen():
     running=next((s for s in data['segments'] if not s['end']),None)
     elapsed=sum(sec for s in data['segments'] if s['cycle']==data['cycle'] for key,sec in portions(s,at) if key==day)
     growth_summary(data)
-    if student:
-        with st.form('home_exam_date'):
-            exam_day=st.date_input('시험 날짜',value=date.fromisoformat(data['exam_day']) if data.get('exam_day') else None)
-            if st.form_submit_button('시험 날짜 저장',use_container_width=True):
-                data['exam_day']=exam_day.isoformat() if exam_day else None
-                rerun()
     st.caption(f'공부일 {day} · '+('공부 중' if running else '정지'))
     clock(elapsed if student else totals(data,at).get(day,0),bool(running))
     if student:
@@ -341,6 +335,12 @@ def home_screen():
                     st.session_state.selected_day=day.isoformat()
                     rerun()
     st.markdown('<div class="rule"></div>',unsafe_allow_html=True)
+    if student:
+        with st.form('home_exam_date'):
+            exam_day=st.date_input('시험 날짜',value=date.fromisoformat(data['exam_day']) if data.get('exam_day') else None)
+            if st.form_submit_button('시험 날짜 저장',use_container_width=True):
+                data['exam_day']=exam_day.isoformat() if exam_day else None
+                rerun()
     day_details(data,date.fromisoformat(st.session_state.get('selected_day',today().isoformat())))
     if not student:
         selected=date.fromisoformat(st.session_state.get('selected_day',today().isoformat()))
@@ -390,7 +390,7 @@ with st.container(key='workspace'):
             source=st.selectbox('문제 구분',['학교 시험','기출·시험 대비 문제'],key='note_source')
             title=st.text_input('문제번호',max_chars=150,key='note_number')
             problem=st.text_area('문제 내용·메모',key='text_problem',height=100,max_chars=8000)
-            interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=100,max_chars=8000)
+            interpretation=st.text_area('틀린 관점·해석의 오류',key='text_interpretation',height=100,max_chars=8000,placeholder='어떤 조건이나 표현을 잘못 해석했나요?')
             preparation=st.text_area('학습·시험 준비에서 부족했던 점',key='text_preparation',height=100,max_chars=8000)
             concept=st.text_area('부족했던 개념',height=80,max_chars=4000,key='note_concept')
             cause=st.multiselect('틀린 원인',CAUSES,key='note_causes')
